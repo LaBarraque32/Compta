@@ -7,7 +7,7 @@ import {
   Users,
   AlertTriangle 
 } from 'lucide-react';
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { getTransactions, getAllEvents, getMembers, calculateExerciceStats } from '../services/database';
 import { ACCOUNTING_PLAN } from '../data/accountingPlan';
 import { Transaction, Event, Member } from '../types/accounting';
@@ -38,24 +38,19 @@ const Dashboard: React.FC = () => {
     try {
       setLoading(true);
       
-      // Load basic stats pour l'exercice sélectionné
       const statsData = await calculateExerciceStats(selectedExercice);
       setStats(statsData);
 
-      // Load transactions pour l'exercice sélectionné
       const transactionsData = await getTransactions(selectedExercice);
       setTransactions(transactionsData);
 
-      // Load events pour l'exercice sélectionné
       const eventsData = await getAllEvents();
       const filteredEvents = eventsData.filter(e => e.exercice === selectedExercice);
       setEvents(filteredEvents);
 
-      // Load members (pas lié à un exercice spécifique)
       const membersData = await getMembers();
       setMembers(membersData);
 
-      // Prepare category data for pie chart
       const categoryStats = ACCOUNTING_PLAN.map(category => {
         const categoryTransactions = transactionsData.filter(t => t.category === category.code);
         const total = categoryTransactions.reduce((sum, t) => sum + t.amount, 0);
@@ -69,7 +64,6 @@ const Dashboard: React.FC = () => {
 
       setCategoryData(categoryStats);
 
-      // Prepare monthly data pour l'exercice sélectionné
       const monthlyStats = Array.from({ length: 12 }, (_, i) => {
         const month = i + 1;
         const monthTransactions = transactionsData.filter(t => {
@@ -208,9 +202,10 @@ const Dashboard: React.FC = () => {
               <p className="text-2xl font-bold text-gray-900">
                 {members.filter(m => m.isActive).length}
               </p>
-            </div> 
+            </div>
           </div>
         </div>
+      </div> {/* ← fermeture du bloc Key Metrics ajoutée ici */}
 
       {/* Charts */}
       {transactions.length > 0 && (
