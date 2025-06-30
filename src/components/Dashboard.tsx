@@ -208,7 +208,7 @@ const Dashboard: React.FC = () => {
               <p className="text-2xl font-bold text-gray-900">
                 {members.filter(m => m.isActive).length}
               </p>
-            </div>
+            </div> */}
           </div>
         </div>
       </div> 
