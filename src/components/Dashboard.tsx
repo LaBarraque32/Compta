@@ -184,7 +184,7 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
 
-      {/*   <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex items-center">
             <div className="flex-shrink-0">
               <DollarSign className={`h-8 w-8 ${stats.result >= 0 ? 'text-green-600' : 'text-red-600'}`} />
@@ -208,7 +208,7 @@ const Dashboard: React.FC = () => {
               <p className="text-2xl font-bold text-gray-900">
                 {members.filter(m => m.isActive).length}
               </p>
-            </div> */}
+            </div> 
           </div>
         </div>
       </div> 
