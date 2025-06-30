@@ -211,7 +211,7 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
         </div>
-      </div> */}
+      </div> 
 
       {/* Charts */}
       {transactions.length > 0 && (
