@@ -64,7 +64,7 @@ const TransactionEditModal: React.FC<TransactionEditModalProps> = ({
     };
 
     loadEventsForExercice();
-  }, [calculatedExercice, formData.eventId]);
+  }, [calculatedExercice]);
 
   const loadData = async () => {
     try {
@@ -73,8 +73,28 @@ const TransactionEditModal: React.FC<TransactionEditModalProps> = ({
         getAllEvents()
       ]);
       setCategories(categoriesData);
-      // Filtrer les événements pour l'exercice de la transaction
+      // Filtrer les événements pour l'exercice calculé
       setEvents(eventsData.filter(e => e.exercice === calculatedExercice));
+      
+      // CORRECTION: S'assurer que les données de la transaction sont bien chargées
+      console.log('Transaction data loaded:', {
+        eventId: transaction.eventId,
+        subcategory: transaction.subcategory,
+        category: transaction.category
+      });
+      
+      // Forcer la mise à jour du formData avec les vraies données de la transaction
+      setFormData({
+        date: transaction.date,
+        amount: transaction.amount,
+        description: transaction.description,
+        category: transaction.category,
+        subcategory: transaction.subcategory || '',
+        paymentMethod: transaction.paymentMethod,
+        type: transaction.type,
+        eventId: transaction.eventId || '',
+        attachment: transaction.attachment || ''
+      });
     } catch (error) {
       console.error('Error loading data:', error);
     }
@@ -84,9 +104,12 @@ const TransactionEditModal: React.FC<TransactionEditModalProps> = ({
   const subcategories = selectedCategory?.subcategories || [];
 
   useEffect(() => {
-    // Reset subcategory when category changes
-    if (formData.category && !subcategories.some(sub => sub.code === formData.subcategory)) {
-      setFormData(prev => ({ ...prev, subcategory: '' }));
+    // Reset subcategory when category changes, but preserve it if it's valid
+    if (formData.category && formData.subcategory) {
+      const isValidSubcategory = subcategories.some(sub => sub.code === formData.subcategory);
+      if (!isValidSubcategory) {
+        setFormData(prev => ({ ...prev, subcategory: '' }));
+      }
     }
   }, [formData.category, subcategories]);
 
@@ -111,6 +134,12 @@ const TransactionEditModal: React.FC<TransactionEditModalProps> = ({
     try {
       // CORRECTION : Calculer automatiquement l'exercice basé sur la date
       const transactionYear = new Date(formData.date).getFullYear().toString();
+      
+      console.log('Updating transaction with data:', {
+        ...formData,
+        amount: Number(formData.amount),
+        exercice: transactionYear
+      });
       
       await updateTransaction(transaction.id, {
         ...formData,

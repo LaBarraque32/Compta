@@ -187,37 +187,54 @@ export function parseExcelFile(file: File): Promise<ExportData> {
         const transactionsJson = XLSX.utils.sheet_to_json(transactionsSheet) as any[];
         
         const transactions: Transaction[] = transactionsJson.map((row, index) => {
-          // Récupérer l'ID de l'événement - CORRECTION: gérer les différents noms de colonnes
+          // Récupérer l'ID de l'événement avec gestion robuste
           let eventId: string | undefined;
           
-          // Essayer d'abord avec les nouvelles colonnes
-          if (row['ID Événement']) {
-            eventId = row['ID Événement'];
-          } else if (row['Nom Événement']) {
-            eventId = eventNameToIdMap.get(row['Nom Événement']);
+          // Priorité 1: ID Événement direct
+          if (row['ID Événement'] && row['ID Événement'].toString().trim()) {
+            eventId = row['ID Événement'].toString().trim();
           }
-          // Fallback sur l'ancienne colonne pour compatibilité
-          else if (row['Événement']) {
-            // Si c'est un ID direct
-            if (events.some(e => e.id === row['Événement'])) {
-              eventId = row['Événement'];
+          // Priorité 2: Nom Événement avec mapping
+          else if (row['Nom Événement'] && row['Nom Événement'].toString().trim()) {
+            const eventName = row['Nom Événement'].toString().trim();
+            eventId = eventNameToIdMap.get(eventName);
+          }
+          // Priorité 3: Colonne Événement (compatibilité)
+          else if (row['Événement'] && row['Événement'].toString().trim()) {
+            const eventValue = row['Événement'].toString().trim();
+            // Essayer d'abord comme ID direct
+            if (events.some(e => e.id === eventValue)) {
+              eventId = eventValue;
             } else {
-              // Sinon essayer de trouver par nom
-              eventId = eventNameToIdMap.get(row['Événement']);
+              // Sinon essayer comme nom
+              eventId = eventNameToIdMap.get(eventValue);
             }
           }
 
-          // Récupérer la sous-catégorie - CORRECTION: gérer les différents noms de colonnes
+          // Récupérer la sous-catégorie avec gestion robuste
           let subcategory: string | undefined;
           
-          // Essayer d'abord avec la nouvelle colonne
-          if (row['Code sous-catégorie']) {
-            subcategory = row['Code sous-catégorie'];
+          // Priorité 1: Code sous-catégorie
+          if (row['Code sous-catégorie'] && row['Code sous-catégorie'].toString().trim()) {
+            subcategory = row['Code sous-catégorie'].toString().trim();
           }
-          // Fallback sur l'ancienne colonne pour compatibilité
-          else if (row['Sous-catégorie']) {
-            subcategory = row['Sous-catégorie'];
+          // Priorité 2: Sous-catégorie (compatibilité)
+          else if (row['Sous-catégorie'] && row['Sous-catégorie'].toString().trim()) {
+            const subcatValue = row['Sous-catégorie'].toString().trim();
+            // Ignorer les valeurs vides ou "Sélectionner une sous-catégorie"
+            if (subcatValue !== 'Sélectionner une sous-catégorie' && subcatValue !== '') {
+              subcategory = subcatValue;
+            }
           }
+
+          console.log(`Transaction ${index + 1}:`, {
+            eventId,
+            subcategory,
+            rawEventId: row['ID Événement'],
+            rawEventName: row['Nom Événement'],
+            rawSubcategory: row['Code sous-catégorie'],
+            rawSubcategoryOld: row['Sous-catégorie']
+          });
 
           return {
             id: `imported-trans-${Date.now()}-${index}`,
@@ -225,10 +242,10 @@ export function parseExcelFile(file: File): Promise<ExportData> {
             amount: parseFloat(row['Montant']) || 0,
             description: row['Description'] || '',
             category: row['Catégorie'] || '',
-            subcategory: subcategory || undefined,
+            subcategory: subcategory,
             paymentMethod: getPaymentMethodValue(row['Mode de paiement']) || 'CB',
             type: row['Type'] === 'recette' ? 'recette' : 'depense',
-            eventId: eventId || undefined,
+            eventId: eventId,
             pieceNumber: row['N° Pièce'] || '',
             isValidated: row['Validé'] === 'Oui',
             exercice: row['Exercice'] || new Date().getFullYear().toString(),
@@ -300,8 +317,10 @@ export function parseExcelFile(file: File): Promise<ExportData> {
           exportDate: exportDateRow?.['Valeur'] || new Date().toISOString().split('T')[0]
         };
 
+        console.log('Import result:', result);
         resolve(result);
       } catch (error) {
+        console.error('Excel parsing error:', error);
         reject(new Error('Erreur lors de la lecture du fichier Excel: ' + error));
       }
     };
