@@ -161,26 +161,37 @@ export function parseExcelFile(file: File): Promise<ExportData> {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
 
-        // Parse events first to create ID mapping
+        // Parse events first to preserve original IDs
         const eventsSheet = workbook.Sheets['Événements'];
         const eventsJson = XLSX.utils.sheet_to_json(eventsSheet) as any[];
         
-        const events: Event[] = eventsJson.map((row, index) => ({
-          id: row['ID'] || `imported-event-${Date.now()}-${index}`,
-          name: row['Nom'] || '',
-          date: formatDateFromExcel(row['Date']),
-          type: row['Type'] || 'concert',
-          budget: parseFloat(row['Budget']) || 0,
-          actualCost: parseFloat(row['Coût réel']) || 0,
-          revenue: parseFloat(row['Recettes']) || 0,
-          capacity: parseInt(row['Capacité']) || 0,
-          attendance: parseInt(row['Fréquentation']) || 0,
-          exercice: row['Exercice'] || new Date().getFullYear().toString(),
-          description: row['Description'] || undefined
-        }));
+        const events: Event[] = eventsJson.map((row, index) => {
+          // CORRECTION: Préserver l'ID original de l'événement s'il existe
+          const originalId = row['ID'];
+          const eventId = originalId && originalId.toString().trim() 
+            ? originalId.toString().trim() 
+            : `imported-event-${Date.now()}-${index}`;
+            
+          return {
+            id: eventId,
+            name: row['Nom'] || '',
+            date: formatDateFromExcel(row['Date']),
+            type: row['Type'] || 'concert',
+            budget: parseFloat(row['Budget']) || 0,
+            actualCost: parseFloat(row['Coût réel']) || 0,
+            revenue: parseFloat(row['Recettes']) || 0,
+            capacity: parseInt(row['Capacité']) || 0,
+            attendance: parseInt(row['Fréquentation']) || 0,
+            exercice: row['Exercice'] || new Date().getFullYear().toString(),
+            description: row['Description'] || undefined
+          };
+        });
 
         // Créer un mapping nom d'événement -> ID pour l'import des transactions
         const eventNameToIdMap = new Map(events.map(e => [e.name, e.id]));
+        
+        console.log('Events loaded:', events);
+        console.log('Event name to ID mapping:', Array.from(eventNameToIdMap.entries()));
 
         // Parse transactions
         const transactionsSheet = workbook.Sheets['Transactions'];
@@ -190,17 +201,23 @@ export function parseExcelFile(file: File): Promise<ExportData> {
           // Récupérer l'ID de l'événement avec gestion robuste
           let eventId: string | undefined;
           
-          // Priorité 1: ID Événement direct
+          // Priorité 1: ID Événement direct (préservé depuis l'export)
           if (row['ID Événement'] && row['ID Événement'].toString().trim()) {
-            eventId = row['ID Événement'].toString().trim();
+            const rawEventId = row['ID Événement'].toString().trim();
+            // Vérifier que cet événement existe dans notre liste
+            if (events.some(e => e.id === rawEventId)) {
+              eventId = rawEventId;
+            }
           }
+          
           // Priorité 2: Nom Événement avec mapping
-          else if (row['Nom Événement'] && row['Nom Événement'].toString().trim()) {
+          if (!eventId && row['Nom Événement'] && row['Nom Événement'].toString().trim()) {
             const eventName = row['Nom Événement'].toString().trim();
             eventId = eventNameToIdMap.get(eventName);
           }
-          // Priorité 3: Colonne Événement (compatibilité)
-          else if (row['Événement'] && row['Événement'].toString().trim()) {
+          
+          // Priorité 3: Colonne Événement (compatibilité ancienne version)
+          if (!eventId && row['Événement'] && row['Événement'].toString().trim()) {
             const eventValue = row['Événement'].toString().trim();
             // Essayer d'abord comme ID direct
             if (events.some(e => e.id === eventValue)) {
@@ -216,7 +233,11 @@ export function parseExcelFile(file: File): Promise<ExportData> {
           
           // Priorité 1: Code sous-catégorie
           if (row['Code sous-catégorie'] && row['Code sous-catégorie'].toString().trim()) {
-            subcategory = row['Code sous-catégorie'].toString().trim();
+            const subcatValue = row['Code sous-catégorie'].toString().trim();
+            // Ignorer les valeurs vides ou par défaut
+            if (subcatValue !== 'Sélectionner une sous-catégorie' && subcatValue !== '') {
+              subcategory = subcatValue;
+            }
           }
           // Priorité 2: Sous-catégorie (compatibilité)
           else if (row['Sous-catégorie'] && row['Sous-catégorie'].toString().trim()) {
@@ -228,12 +249,13 @@ export function parseExcelFile(file: File): Promise<ExportData> {
           }
 
           console.log(`Transaction ${index + 1}:`, {
+            description: row['Description'],
             eventId,
             subcategory,
             rawEventId: row['ID Événement'],
             rawEventName: row['Nom Événement'],
             rawSubcategory: row['Code sous-catégorie'],
-            rawSubcategoryOld: row['Sous-catégorie']
+            eventExists: eventId ? events.some(e => e.id === eventId) : false
           });
 
           return {
@@ -317,7 +339,12 @@ export function parseExcelFile(file: File): Promise<ExportData> {
           exportDate: exportDateRow?.['Valeur'] || new Date().toISOString().split('T')[0]
         };
 
-        console.log('Import result:', result);
+        console.log('Import result:', {
+          transactionsCount: result.transactions.length,
+          eventsCount: result.events.length,
+          transactionsWithEvents: result.transactions.filter(t => t.eventId).length
+        });
+        
         resolve(result);
       } catch (error) {
         console.error('Excel parsing error:', error);
