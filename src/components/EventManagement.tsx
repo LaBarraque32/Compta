@@ -9,7 +9,8 @@ import {
   TrendingUp,
   TrendingDown,
   Users,
-  Euro
+  Euro,
+  Check
 } from 'lucide-react';
 import { getAllEvents, addEvent, updateEvent, deleteEvent, getAllTransactions, getExercices, getActiveExercice } from '../services/database';
 import { EVENT_TYPES } from '../data/accountingPlan';
@@ -24,6 +25,10 @@ const EventManagement: React.FC = () => {
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [selectedExercice, setSelectedExercice] = useState<string>('');
   const [exercices, setExercices] = useState<any[]>([]);
+  const [eventTypes, setEventTypes] = useState(EVENT_TYPES);
+  const [isAddingNewType, setIsAddingNewType] = useState(false);
+  const [newTypeName, setNewTypeName] = useState('');
+  const [newTypeError, setNewTypeError] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     date: new Date().toISOString().split('T')[0],
@@ -60,6 +65,13 @@ const EventManagement: React.FC = () => {
       ]);
       setAllEvents(eventsData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
       setTransactions(transactionsData);
+
+      // Charger les types d'événements personnalisés depuis localStorage
+      const savedTypes = localStorage.getItem('customEventTypes');
+      if (savedTypes) {
+        const customTypes = JSON.parse(savedTypes);
+        setEventTypes([...EVENT_TYPES, ...customTypes]);
+      }
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -93,6 +105,60 @@ const EventManagement: React.FC = () => {
       result: revenue - expenses,
       transactionCount: eventTransactions.length
     };
+  };
+
+  const handleAddNewType = () => {
+    setIsAddingNewType(true);
+    setNewTypeName('');
+    setNewTypeError('');
+  };
+
+  const handleCancelNewType = () => {
+    setIsAddingNewType(false);
+    setNewTypeName('');
+    setNewTypeError('');
+  };
+
+  const validateNewType = (name: string): string => {
+    if (!name.trim()) {
+      return 'Le nom du type est obligatoire';
+    }
+    if (name.trim().length < 2) {
+      return 'Le nom doit contenir au moins 2 caractères';
+    }
+    if (eventTypes.some(type => type.label.toLowerCase() === name.trim().toLowerCase())) {
+      return 'Ce type existe déjà';
+    }
+    return '';
+  };
+
+  const handleSaveNewType = () => {
+    const error = validateNewType(newTypeName);
+    if (error) {
+      setNewTypeError(error);
+      return;
+    }
+
+    const newType = {
+      value: newTypeName.toLowerCase().replace(/\s+/g, '-'),
+      label: newTypeName.trim()
+    };
+
+    // Ajouter le nouveau type à la liste
+    const updatedTypes = [...eventTypes, newType];
+    setEventTypes(updatedTypes);
+
+    // Sauvegarder les types personnalisés dans localStorage
+    const customTypes = updatedTypes.filter(type => 
+      !EVENT_TYPES.some(defaultType => defaultType.value === type.value)
+    );
+    localStorage.setItem('customEventTypes', JSON.stringify(customTypes));
+
+    // Sélectionner le nouveau type et fermer le mode ajout
+    setFormData(prev => ({ ...prev, type: newType.value as any }));
+    setIsAddingNewType(false);
+    setNewTypeName('');
+    setNewTypeError('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -155,6 +221,9 @@ const EventManagement: React.FC = () => {
     });
     setEditingEvent(null);
     setShowForm(false);
+    setIsAddingNewType(false);
+    setNewTypeName('');
+    setNewTypeError('');
   };
 
   if (loading) {
@@ -244,18 +313,66 @@ const EventManagement: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Type *
                     </label>
-                    <select
-                      required
-                      value={formData.type}
-                      onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value as any }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      {EVENT_TYPES.map((type) => (
-                        <option key={type.value} value={type.value}>
-                          {type.label}
+                    {isAddingNewType ? (
+                      <div className="space-y-2">
+                        <input
+                          type="text"
+                          value={newTypeName}
+                          onChange={(e) => {
+                            setNewTypeName(e.target.value);
+                            setNewTypeError('');
+                          }}
+                          placeholder="Nom du nouveau type"
+                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                            newTypeError ? 'border-red-300' : 'border-gray-300'
+                          }`}
+                          autoFocus
+                        />
+                        {newTypeError && (
+                          <p className="text-xs text-red-600">{newTypeError}</p>
+                        )}
+                        <div className="flex space-x-2">
+                          <button
+                            type="button"
+                            onClick={handleSaveNewType}
+                            className="flex items-center px-2 py-1 text-xs font-medium text-white bg-green-600 rounded hover:bg-green-700 transition-colors"
+                          >
+                            <Check size={12} className="mr-1" />
+                            Valider
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCancelNewType}
+                            className="flex items-center px-2 py-1 text-xs font-medium text-gray-700 bg-gray-200 rounded hover:bg-gray-300 transition-colors"
+                          >
+                            <X size={12} className="mr-1" />
+                            Annuler
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <select
+                        required
+                        value={formData.type}
+                        onChange={(e) => {
+                          if (e.target.value === 'add-new') {
+                            handleAddNewType();
+                          } else {
+                            setFormData(prev => ({ ...prev, type: e.target.value as any }));
+                          }
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        {eventTypes.map((type) => (
+                          <option key={type.value} value={type.value}>
+                            {type.label}
+                          </option>
+                        ))}
+                        <option value="add-new" className="text-blue-600 font-medium">
+                          ➕ Ajouter un nouveau type
                         </option>
-                      ))}
-                    </select>
+                      </select>
+                    )}
                   </div>
                 </div>
 
@@ -311,7 +428,8 @@ const EventManagement: React.FC = () => {
                   </button>
                   <button
                     type="submit"
-                    className="flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 transition-colors"
+                    disabled={isAddingNewType}
+                    className="flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Save size={16} className="mr-2" />
                     {editingEvent ? 'Modifier' : 'Créer'}
@@ -364,7 +482,7 @@ const EventManagement: React.FC = () => {
                         <Calendar size={14} className="mr-1" />
                         {new Date(event.date).toLocaleDateString('fr-FR')}
                       </span>
-                      <span>{EVENT_TYPES.find(t => t.value === event.type)?.label}</span>
+                      <span>{eventTypes.find(t => t.value === event.type)?.label || event.type}</span>
                       {event.capacity > 0 && (
                         <span className="flex items-center">
                           <Users size={14} className="mr-1" />
