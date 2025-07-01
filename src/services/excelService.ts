@@ -19,29 +19,52 @@ export interface ImportOptions {
 export function exportToExcel(data: ExportData): void {
   const workbook = XLSX.utils.book_new();
 
+  // Créer un mapping des événements pour l'export
+  const eventsMap = new Map(data.events.map(e => [e.id, e.name]));
+  
+  // Créer un mapping des catégories pour l'export des sous-catégories
+  const categoriesMap = new Map(data.categories.map(c => [c.code, c]));
+
   // Feuille Transactions
-  const transactionsData = data.transactions.map(t => ({
-    'Date': t.date,
-    'N° Pièce': t.pieceNumber,
-    'Description': t.description,
-    'Catégorie': t.category,
-    'Sous-catégorie': t.subcategory || '',
-    'Type': t.type,
-    'Montant': t.amount,
-    'Mode de paiement': PAYMENT_METHODS.find(pm => pm.value === t.paymentMethod)?.label || t.paymentMethod,
-    'Événement': t.eventId || '',
-    'Validé': t.isValidated ? 'Oui' : 'Non',
-    'Exercice': t.exercice,
-    'Créé le': new Date(t.createdAt).toLocaleDateString('fr-FR'),
-    'Modifié le': new Date(t.updatedAt).toLocaleDateString('fr-FR'),
-    'Justificatif': t.attachment || ''
-  }));
+  const transactionsData = data.transactions.map(t => {
+    // Récupérer le nom de l'événement associé
+    const eventName = t.eventId ? eventsMap.get(t.eventId) || '' : '';
+    
+    // Récupérer le nom de la sous-catégorie
+    let subcategoryName = '';
+    if (t.subcategory && t.category) {
+      const category = categoriesMap.get(t.category);
+      const subcategory = category?.subcategories?.find(sub => sub.code === t.subcategory);
+      subcategoryName = subcategory ? subcategory.name : '';
+    }
+
+    return {
+      'Date': t.date,
+      'N° Pièce': t.pieceNumber,
+      'Description': t.description,
+      'Catégorie': t.category,
+      'Nom catégorie': categoriesMap.get(t.category)?.name || '',
+      'Code sous-catégorie': t.subcategory || '',
+      'Nom sous-catégorie': subcategoryName,
+      'Type': t.type,
+      'Montant': t.amount,
+      'Mode de paiement': PAYMENT_METHODS.find(pm => pm.value === t.paymentMethod)?.label || t.paymentMethod,
+      'ID Événement': t.eventId || '',
+      'Nom Événement': eventName,
+      'Validé': t.isValidated ? 'Oui' : 'Non',
+      'Exercice': t.exercice,
+      'Créé le': new Date(t.createdAt).toLocaleDateString('fr-FR'),
+      'Modifié le': new Date(t.updatedAt).toLocaleDateString('fr-FR'),
+      'Justificatif': t.attachment || ''
+    };
+  });
 
   const transactionsSheet = XLSX.utils.json_to_sheet(transactionsData);
   XLSX.utils.book_append_sheet(workbook, transactionsSheet, 'Transactions');
 
   // Feuille Événements
   const eventsData = data.events.map(e => ({
+    'ID': e.id,
     'Nom': e.name,
     'Date': e.date,
     'Type': e.type,
@@ -138,34 +161,12 @@ export function parseExcelFile(file: File): Promise<ExportData> {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
 
-        // Parse transactions
-        const transactionsSheet = workbook.Sheets['Transactions'];
-        const transactionsJson = XLSX.utils.sheet_to_json(transactionsSheet) as any[];
-        
-        const transactions: Transaction[] = transactionsJson.map((row, index) => ({
-          id: `imported-trans-${Date.now()}-${index}`,
-          date: formatDateFromExcel(row['Date']),
-          amount: parseFloat(row['Montant']) || 0,
-          description: row['Description'] || '',
-          category: row['Catégorie'] || '',
-          subcategory: row['Sous-catégorie'] || undefined,
-          paymentMethod: getPaymentMethodValue(row['Mode de paiement']) || 'CB',
-          type: row['Type'] === 'recette' ? 'recette' : 'depense',
-          eventId: row['Événement'] || undefined,
-          pieceNumber: row['N° Pièce'] || '',
-          isValidated: row['Validé'] === 'Oui',
-          exercice: row['Exercice'] || new Date().getFullYear().toString(),
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          attachment: row['Justificatif'] || undefined
-        }));
-
-        // Parse events
+        // Parse events first to create ID mapping
         const eventsSheet = workbook.Sheets['Événements'];
         const eventsJson = XLSX.utils.sheet_to_json(eventsSheet) as any[];
         
         const events: Event[] = eventsJson.map((row, index) => ({
-          id: `imported-event-${Date.now()}-${index}`,
+          id: row['ID'] || `imported-event-${Date.now()}-${index}`,
           name: row['Nom'] || '',
           date: formatDateFromExcel(row['Date']),
           type: row['Type'] || 'concert',
@@ -177,6 +178,43 @@ export function parseExcelFile(file: File): Promise<ExportData> {
           exercice: row['Exercice'] || new Date().getFullYear().toString(),
           description: row['Description'] || undefined
         }));
+
+        // Créer un mapping nom d'événement -> ID pour l'import des transactions
+        const eventNameToIdMap = new Map(events.map(e => [e.name, e.id]));
+
+        // Parse transactions
+        const transactionsSheet = workbook.Sheets['Transactions'];
+        const transactionsJson = XLSX.utils.sheet_to_json(transactionsSheet) as any[];
+        
+        const transactions: Transaction[] = transactionsJson.map((row, index) => {
+          // Récupérer l'ID de l'événement
+          let eventId: string | undefined;
+          if (row['ID Événement']) {
+            // Si l'ID est directement fourni
+            eventId = row['ID Événement'];
+          } else if (row['Nom Événement']) {
+            // Sinon, essayer de retrouver l'ID par le nom
+            eventId = eventNameToIdMap.get(row['Nom Événement']);
+          }
+
+          return {
+            id: `imported-trans-${Date.now()}-${index}`,
+            date: formatDateFromExcel(row['Date']),
+            amount: parseFloat(row['Montant']) || 0,
+            description: row['Description'] || '',
+            category: row['Catégorie'] || '',
+            subcategory: row['Code sous-catégorie'] || undefined,
+            paymentMethod: getPaymentMethodValue(row['Mode de paiement']) || 'CB',
+            type: row['Type'] === 'recette' ? 'recette' : 'depense',
+            eventId: eventId || undefined,
+            pieceNumber: row['N° Pièce'] || '',
+            isValidated: row['Validé'] === 'Oui',
+            exercice: row['Exercice'] || new Date().getFullYear().toString(),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            attachment: row['Justificatif'] || undefined
+          };
+        });
 
         // Parse categories
         const categoriesSheet = workbook.Sheets['Catégories'];
