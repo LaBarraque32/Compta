@@ -187,14 +187,36 @@ export function parseExcelFile(file: File): Promise<ExportData> {
         const transactionsJson = XLSX.utils.sheet_to_json(transactionsSheet) as any[];
         
         const transactions: Transaction[] = transactionsJson.map((row, index) => {
-          // Récupérer l'ID de l'événement
+          // Récupérer l'ID de l'événement - CORRECTION: gérer les différents noms de colonnes
           let eventId: string | undefined;
+          
+          // Essayer d'abord avec les nouvelles colonnes
           if (row['ID Événement']) {
-            // Si l'ID est directement fourni
             eventId = row['ID Événement'];
           } else if (row['Nom Événement']) {
-            // Sinon, essayer de retrouver l'ID par le nom
             eventId = eventNameToIdMap.get(row['Nom Événement']);
+          }
+          // Fallback sur l'ancienne colonne pour compatibilité
+          else if (row['Événement']) {
+            // Si c'est un ID direct
+            if (events.some(e => e.id === row['Événement'])) {
+              eventId = row['Événement'];
+            } else {
+              // Sinon essayer de trouver par nom
+              eventId = eventNameToIdMap.get(row['Événement']);
+            }
+          }
+
+          // Récupérer la sous-catégorie - CORRECTION: gérer les différents noms de colonnes
+          let subcategory: string | undefined;
+          
+          // Essayer d'abord avec la nouvelle colonne
+          if (row['Code sous-catégorie']) {
+            subcategory = row['Code sous-catégorie'];
+          }
+          // Fallback sur l'ancienne colonne pour compatibilité
+          else if (row['Sous-catégorie']) {
+            subcategory = row['Sous-catégorie'];
           }
 
           return {
@@ -203,7 +225,7 @@ export function parseExcelFile(file: File): Promise<ExportData> {
             amount: parseFloat(row['Montant']) || 0,
             description: row['Description'] || '',
             category: row['Catégorie'] || '',
-            subcategory: row['Code sous-catégorie'] || undefined,
+            subcategory: subcategory || undefined,
             paymentMethod: getPaymentMethodValue(row['Mode de paiement']) || 'CB',
             type: row['Type'] === 'recette' ? 'recette' : 'depense',
             eventId: eventId || undefined,
