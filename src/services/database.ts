@@ -124,7 +124,7 @@ async function initializeDefaultData(): Promise<void> {
       await db.put('exercices', exercice);
     }
 
-    // Add sample transactions for 2024
+    // Add sample transactions for 2024 - CORRECTION : Numéros de pièce avec année
     const sampleTransactions: Transaction[] = [
       {
         id: 'trans-1',
@@ -135,7 +135,7 @@ async function initializeDefaultData(): Promise<void> {
         subcategory: '741',
         paymentMethod: 'Virement',
         type: 'recette',
-        pieceNumber: 'REC001',
+        pieceNumber: '2024-REC001',
         isValidated: true,
         exercice: '2024',
         createdAt: new Date().toISOString(),
@@ -150,7 +150,7 @@ async function initializeDefaultData(): Promise<void> {
         subcategory: '611',
         paymentMethod: 'Cheque',
         type: 'depense',
-        pieceNumber: 'DEP001',
+        pieceNumber: '2024-DEP001',
         isValidated: true,
         exercice: '2024',
         createdAt: new Date().toISOString(),
@@ -166,7 +166,7 @@ async function initializeDefaultData(): Promise<void> {
         paymentMethod: 'CB',
         type: 'recette',
         eventId: 'event-1',
-        pieceNumber: 'REC002',
+        pieceNumber: '2024-REC002',
         isValidated: true,
         exercice: '2024',
         createdAt: new Date().toISOString(),
@@ -174,7 +174,7 @@ async function initializeDefaultData(): Promise<void> {
       }
     ];
 
-    // Add some transactions for 2023 (closed exercice)
+    // Add some transactions for 2023 (closed exercice) - CORRECTION : Numéros de pièce avec année
     const sampleTransactions2023: Transaction[] = [
       {
         id: 'trans-2023-1',
@@ -185,7 +185,7 @@ async function initializeDefaultData(): Promise<void> {
         subcategory: '741',
         paymentMethod: 'Virement',
         type: 'recette',
-        pieceNumber: 'REC001',
+        pieceNumber: '2023-REC001',
         isValidated: true,
         exercice: '2023',
         createdAt: new Date().toISOString(),
@@ -200,7 +200,7 @@ async function initializeDefaultData(): Promise<void> {
         subcategory: '604',
         paymentMethod: 'CB',
         type: 'depense',
-        pieceNumber: 'DEP001',
+        pieceNumber: '2023-DEP001',
         isValidated: true,
         exercice: '2023',
         createdAt: new Date().toISOString(),
@@ -442,13 +442,13 @@ export async function deleteExercice(id: string): Promise<void> {
   await db.delete('exercices', id);
 }
 
-// Utility functions
+// Utility functions - CORRECTION : Numéros de pièce avec année
 export async function generatePieceNumber(type: 'recette' | 'depense', exercice: string): Promise<string> {
   const transactions = await getTransactions(exercice);
   const filteredTransactions = transactions.filter(t => t.type === type);
   const count = filteredTransactions.length + 1;
   const prefix = type === 'recette' ? 'REC' : 'DEP';
-  return `${prefix}${count.toString().padStart(3, '0')}`;
+  return `${exercice}-${prefix}${count.toString().padStart(3, '0')}`;
 }
 
 export async function calculateExerciceStats(exercice: string): Promise<{

@@ -194,43 +194,65 @@ export function parseExcelFile(file: File): Promise<ExportData> {
           };
         });
 
-        // Créer un mapping nom d'événement -> ID pour l'import des transactions
+        // CORRECTION MAJEURE : Créer un mapping robuste pour les événements
         const eventNameToIdMap = new Map(events.map(e => [e.name, e.id]));
+        const eventIdMap = new Map(events.map(e => [e.id, e]));
+
+        console.log('Events loaded:', events);
+        console.log('Event mappings:', {
+          nameToId: Array.from(eventNameToIdMap.entries()),
+          idMap: Array.from(eventIdMap.keys())
+        });
 
         // Parse transactions - CORRECTION COMPLÈTE
         const transactionsSheet = workbook.Sheets['Transactions'];
         const transactionsJson = XLSX.utils.sheet_to_json(transactionsSheet) as any[];
         
         const transactions: Transaction[] = transactionsJson.map((row, index) => {
-          // CORRECTION : Récupération robuste de l'ID de l'événement
+          // CORRECTION MAJEURE : Récupération robuste de l'ID de l'événement
           let eventId: string | undefined;
           
           // Priorité 1: Événement ID (nouveau format)
           if (row['Événement ID'] && row['Événement ID'].toString().trim()) {
             const rawEventId = row['Événement ID'].toString().trim();
-            if (events.some(e => e.id === rawEventId)) {
+            // Vérifier si cet ID existe dans les événements importés
+            if (eventIdMap.has(rawEventId)) {
               eventId = rawEventId;
+              console.log(`✅ Event ID trouvé directement: ${rawEventId}`);
+            } else {
+              console.log(`❌ Event ID non trouvé: ${rawEventId}, événements disponibles:`, Array.from(eventIdMap.keys()));
             }
           }
           
           // Priorité 2: ID Événement (ancien format)
           if (!eventId && row['ID Événement'] && row['ID Événement'].toString().trim()) {
             const rawEventId = row['ID Événement'].toString().trim();
-            if (events.some(e => e.id === rawEventId)) {
+            if (eventIdMap.has(rawEventId)) {
               eventId = rawEventId;
+              console.log(`✅ ID Événement trouvé: ${rawEventId}`);
             }
           }
           
-          // Priorité 3: Événement Nom (nouveau format)
+          // Priorité 3: Événement Nom (nouveau format) - Mapping par nom
           if (!eventId && row['Événement Nom'] && row['Événement Nom'].toString().trim()) {
             const eventName = row['Événement Nom'].toString().trim();
-            eventId = eventNameToIdMap.get(eventName);
+            const mappedId = eventNameToIdMap.get(eventName);
+            if (mappedId) {
+              eventId = mappedId;
+              console.log(`✅ Event trouvé par nom: ${eventName} -> ${mappedId}`);
+            } else {
+              console.log(`❌ Event non trouvé par nom: ${eventName}, noms disponibles:`, Array.from(eventNameToIdMap.keys()));
+            }
           }
           
           // Priorité 4: Nom Événement (ancien format)
           if (!eventId && row['Nom Événement'] && row['Nom Événement'].toString().trim()) {
             const eventName = row['Nom Événement'].toString().trim();
-            eventId = eventNameToIdMap.get(eventName);
+            const mappedId = eventNameToIdMap.get(eventName);
+            if (mappedId) {
+              eventId = mappedId;
+              console.log(`✅ Nom Événement trouvé: ${eventName} -> ${mappedId}`);
+            }
           }
 
           // CORRECTION : Récupération robuste de la sous-catégorie
@@ -282,7 +304,9 @@ export function parseExcelFile(file: File): Promise<ExportData> {
             subcategory,
             category,
             paymentMethod,
-            eventExists: eventId ? events.some(e => e.id === eventId) : false
+            eventExists: eventId ? eventIdMap.has(eventId) : false,
+            rawEventId: row['Événement ID'],
+            rawEventName: row['Événement Nom']
           });
 
           return {
@@ -366,11 +390,13 @@ export function parseExcelFile(file: File): Promise<ExportData> {
           exportDate: exportDateRow?.['Valeur'] || new Date().toISOString().split('T')[0]
         };
 
-        console.log('Import result:', {
+        console.log('Import result final:', {
           transactionsCount: result.transactions.length,
           eventsCount: result.events.length,
           transactionsWithEvents: result.transactions.filter(t => t.eventId).length,
-          transactionsWithSubcategories: result.transactions.filter(t => t.subcategory).length
+          transactionsWithSubcategories: result.transactions.filter(t => t.subcategory).length,
+          eventIds: result.events.map(e => e.id),
+          transactionEventIds: result.transactions.filter(t => t.eventId).map(t => t.eventId)
         });
         
         resolve(result);
