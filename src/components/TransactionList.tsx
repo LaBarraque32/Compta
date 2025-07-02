@@ -11,7 +11,8 @@ import {
   FileText,
   Calendar,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  Users
 } from 'lucide-react';
 import { 
   getAllTransactions,
@@ -51,6 +52,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [filteredTransactions, setFilteredTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<(Category & { id: string })[]>([]);
+  const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -78,13 +80,15 @@ const TransactionList: React.FC<TransactionListProps> = ({
     try {
       setLoading(true);
       
-      const [transactionsData, categoriesData] = await Promise.all([
+      const [transactionsData, categoriesData, eventsData] = await Promise.all([
         getAllTransactions(),
-        getCategories()
+        getCategories(),
+        getAllEvents()
       ]);
       
       setAllTransactions(transactionsData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
       setCategories(categoriesData);
+      setEvents(eventsData);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -180,6 +184,12 @@ const TransactionList: React.FC<TransactionListProps> = ({
     const category = categories.find(cat => cat.code === categoryCode);
     const subcategory = category?.subcategories?.find(sub => sub.code === subcategoryCode);
     return subcategory ? subcategory.name : subcategoryCode;
+  };
+
+  // AJOUT : Fonction pour récupérer le nom de l'événement
+  const getEventName = (eventId: string) => {
+    const event = events.find(e => e.id === eventId);
+    return event ? event.name : '';
   };
 
   const handleExportExcel = async () => {
@@ -669,11 +679,20 @@ const TransactionList: React.FC<TransactionListProps> = ({
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">
                       {transaction.pieceNumber}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-900 max-w-xs truncate">
-                      {transaction.description}
-                      {transaction.attachment && (
-                        <FileText size={14} className="inline ml-1 text-blue-500" />
-                      )}
+                    <td className="px-4 py-3 text-sm text-gray-900">
+                      <div className="max-w-xs">
+                        <div className="truncate font-medium">{transaction.description}</div>
+                        {/* AMÉLIORATION : Affichage de l'événement associé */}
+                        {transaction.eventId && (
+                          <div className="flex items-center text-xs text-blue-600 mt-1">
+                            <Users size={12} className="mr-1" />
+                            {getEventName(transaction.eventId)}
+                          </div>
+                        )}
+                        {transaction.attachment && (
+                          <FileText size={14} className="inline ml-1 text-blue-500" />
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900">
                       <div>
