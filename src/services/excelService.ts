@@ -25,10 +25,16 @@ export function exportToExcel(data: ExportData): void {
   // Créer un mapping des catégories pour l'export des sous-catégories
   const categoriesMap = new Map(data.categories.map(c => [c.code, c]));
 
-  // Feuille Transactions - SIMPLIFICATION : Export direct du nom d'événement
+  console.log('🎯 Export - Events mapping:', Array.from(eventsMap.entries()));
+
+  // Feuille Transactions - CORRECTION : Export correct du nom d'événement
   const transactionsData = data.transactions.map(t => {
-    // Récupérer le nom de l'événement associé
-    const eventName = t.eventId ? eventsMap.get(t.eventId) || '' : '';
+    // CORRECTION : Récupérer le nom de l'événement associé
+    let eventName = '';
+    if (t.eventId && t.eventId.trim() !== '') {
+      eventName = eventsMap.get(t.eventId) || '';
+      console.log(`📝 Transaction "${t.description}" - EventID: ${t.eventId} -> EventName: "${eventName}"`);
+    }
     
     // Récupérer le nom de la catégorie
     const categoryName = categoriesMap.get(t.category)?.name || '';
@@ -56,7 +62,7 @@ export function exportToExcel(data: ExportData): void {
       'Montant': t.amount,
       'Mode Paiement Code': t.paymentMethod,
       'Mode Paiement Nom': paymentMethodLabel,
-      'Événement': eventName, // SIMPLIFICATION : Une seule colonne avec le nom
+      'Événement': eventName, // CORRECTION : Cette valeur doit être remplie !
       'Validé': t.isValidated ? 'Oui' : 'Non',
       'Exercice': t.exercice,
       'Créé le': new Date(t.createdAt).toLocaleDateString('fr-FR'),
@@ -64,6 +70,8 @@ export function exportToExcel(data: ExportData): void {
       'Justificatif': t.attachment || ''
     };
   });
+
+  console.log('📊 Export - Sample transaction data:', transactionsData[0]);
 
   const transactionsSheet = XLSX.utils.json_to_sheet(transactionsData);
   XLSX.utils.book_append_sheet(workbook, transactionsSheet, 'Transactions');
@@ -192,32 +200,59 @@ export function parseExcelFile(file: File): Promise<ExportData> {
           };
         });
 
-        // SIMPLIFICATION MAJEURE : Mapping uniquement par nom d'événement
-        const eventNameToIdMap = new Map(events.map(e => [e.name.trim(), e.id]));
+        // Mapping par nom d'événement (insensible à la casse et aux espaces)
+        const eventNameToIdMap = new Map();
+        events.forEach(e => {
+          const normalizedName = e.name.trim().toLowerCase();
+          eventNameToIdMap.set(normalizedName, e.id);
+        });
 
         console.log('🎯 Events loaded:', events.map(e => ({ id: e.id, name: e.name })));
-        console.log('🎯 Event name mapping:', Array.from(eventNameToIdMap.entries()));
+        console.log('🎯 Event name mapping (normalized):', Array.from(eventNameToIdMap.entries()));
 
-        // Parse transactions - LOGIQUE SIMPLIFIÉE
+        // Parse transactions - LOGIQUE AMÉLIORÉE
         const transactionsSheet = workbook.Sheets['Transactions'];
         const transactionsJson = XLSX.utils.sheet_to_json(transactionsSheet) as any[];
         
         const transactions: Transaction[] = transactionsJson.map((row, index) => {
-          // SIMPLIFICATION : Récupération de l'événement par nom uniquement
+          // AMÉLIORATION : Récupération robuste de l'événement
           let eventId: string | undefined;
           
           // Récupérer le nom de l'événement depuis la colonne "Événement"
-          const eventName = row['Événement'] ? row['Événement'].toString().trim() : '';
+          const rawEventName = row['Événement'];
+          let eventName = '';
+          
+          if (rawEventName) {
+            if (typeof rawEventName === 'string') {
+              eventName = rawEventName.trim();
+            } else {
+              eventName = rawEventName.toString().trim();
+            }
+          }
+          
+          console.log(`📝 Transaction ${index + 1} - Raw event: "${rawEventName}" -> Cleaned: "${eventName}"`);
           
           if (eventName && eventName !== '') {
-            // Chercher l'événement par nom exact
-            eventId = eventNameToIdMap.get(eventName);
+            // Chercher l'événement par nom (insensible à la casse)
+            const normalizedEventName = eventName.toLowerCase();
+            eventId = eventNameToIdMap.get(normalizedEventName);
             
             if (eventId) {
               console.log(`✅ Événement trouvé: "${eventName}" -> ${eventId}`);
             } else {
               console.log(`❌ Événement non trouvé: "${eventName}"`);
-              console.log('📋 Événements disponibles:', Array.from(eventNameToIdMap.keys()));
+              console.log('📋 Événements disponibles:', events.map(e => e.name));
+              
+              // Tentative de correspondance partielle
+              const partialMatch = events.find(e => 
+                e.name.toLowerCase().includes(normalizedEventName) ||
+                normalizedEventName.includes(e.name.toLowerCase())
+              );
+              
+              if (partialMatch) {
+                eventId = partialMatch.id;
+                console.log(`🔍 Correspondance partielle trouvée: "${eventName}" -> "${partialMatch.name}" (${eventId})`);
+              }
             }
           }
 
@@ -245,14 +280,6 @@ export function parseExcelFile(file: File): Promise<ExportData> {
           } else if (row['Mode de paiement'] && row['Mode de paiement'].toString().trim()) {
             paymentMethod = getPaymentMethodValue(row['Mode de paiement'].toString().trim());
           }
-
-          console.log(`📝 Transaction ${index + 1}:`, {
-            description: row['Description'],
-            eventName,
-            eventId,
-            subcategory,
-            found: !!eventId
-          });
 
           return {
             id: `imported-trans-${Date.now()}-${index}`,
