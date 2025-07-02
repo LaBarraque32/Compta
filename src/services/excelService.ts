@@ -25,7 +25,7 @@ export function exportToExcel(data: ExportData): void {
   // Créer un mapping des catégories pour l'export des sous-catégories
   const categoriesMap = new Map(data.categories.map(c => [c.code, c]));
 
-  // Feuille Transactions - CORRECTION COMPLÈTE
+  // Feuille Transactions - SIMPLIFICATION : Export direct du nom d'événement
   const transactionsData = data.transactions.map(t => {
     // Récupérer le nom de l'événement associé
     const eventName = t.eventId ? eventsMap.get(t.eventId) || '' : '';
@@ -56,8 +56,7 @@ export function exportToExcel(data: ExportData): void {
       'Montant': t.amount,
       'Mode Paiement Code': t.paymentMethod,
       'Mode Paiement Nom': paymentMethodLabel,
-      'Événement ID': t.eventId || '',
-      'Événement Nom': eventName,
+      'Événement': eventName, // SIMPLIFICATION : Une seule colonne avec le nom
       'Validé': t.isValidated ? 'Oui' : 'Non',
       'Exercice': t.exercice,
       'Créé le': new Date(t.createdAt).toLocaleDateString('fr-FR'),
@@ -168,12 +167,11 @@ export function parseExcelFile(file: File): Promise<ExportData> {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
 
-        // Parse events first to preserve original IDs
+        // Parse events first
         const eventsSheet = workbook.Sheets['Événements'];
         const eventsJson = XLSX.utils.sheet_to_json(eventsSheet) as any[];
         
         const events: Event[] = eventsJson.map((row, index) => {
-          // Préserver l'ID original de l'événement s'il existe
           const originalId = row['ID'];
           const eventId = originalId && originalId.toString().trim() 
             ? originalId.toString().trim() 
@@ -194,119 +192,66 @@ export function parseExcelFile(file: File): Promise<ExportData> {
           };
         });
 
-        // CORRECTION MAJEURE : Créer un mapping robuste pour les événements
-        const eventNameToIdMap = new Map(events.map(e => [e.name, e.id]));
-        const eventIdMap = new Map(events.map(e => [e.id, e]));
+        // SIMPLIFICATION MAJEURE : Mapping uniquement par nom d'événement
+        const eventNameToIdMap = new Map(events.map(e => [e.name.trim(), e.id]));
 
-        console.log('Events loaded:', events);
-        console.log('Event mappings:', {
-          nameToId: Array.from(eventNameToIdMap.entries()),
-          idMap: Array.from(eventIdMap.keys())
-        });
+        console.log('🎯 Events loaded:', events.map(e => ({ id: e.id, name: e.name })));
+        console.log('🎯 Event name mapping:', Array.from(eventNameToIdMap.entries()));
 
-        // Parse transactions - CORRECTION COMPLÈTE
+        // Parse transactions - LOGIQUE SIMPLIFIÉE
         const transactionsSheet = workbook.Sheets['Transactions'];
         const transactionsJson = XLSX.utils.sheet_to_json(transactionsSheet) as any[];
         
         const transactions: Transaction[] = transactionsJson.map((row, index) => {
-          // CORRECTION MAJEURE : Récupération robuste de l'ID de l'événement
+          // SIMPLIFICATION : Récupération de l'événement par nom uniquement
           let eventId: string | undefined;
           
-          // Priorité 1: Événement ID (nouveau format)
-          if (row['Événement ID'] && row['Événement ID'].toString().trim()) {
-            const rawEventId = row['Événement ID'].toString().trim();
-            // Vérifier si cet ID existe dans les événements importés
-            if (eventIdMap.has(rawEventId)) {
-              eventId = rawEventId;
-              console.log(`✅ Event ID trouvé directement: ${rawEventId}`);
+          // Récupérer le nom de l'événement depuis la colonne "Événement"
+          const eventName = row['Événement'] ? row['Événement'].toString().trim() : '';
+          
+          if (eventName && eventName !== '') {
+            // Chercher l'événement par nom exact
+            eventId = eventNameToIdMap.get(eventName);
+            
+            if (eventId) {
+              console.log(`✅ Événement trouvé: "${eventName}" -> ${eventId}`);
             } else {
-              console.log(`❌ Event ID non trouvé: ${rawEventId}, événements disponibles:`, Array.from(eventIdMap.keys()));
-            }
-          }
-          
-          // Priorité 2: ID Événement (ancien format)
-          if (!eventId && row['ID Événement'] && row['ID Événement'].toString().trim()) {
-            const rawEventId = row['ID Événement'].toString().trim();
-            if (eventIdMap.has(rawEventId)) {
-              eventId = rawEventId;
-              console.log(`✅ ID Événement trouvé: ${rawEventId}`);
-            }
-          }
-          
-          // Priorité 3: Événement Nom (nouveau format) - Mapping par nom
-          if (!eventId && row['Événement Nom'] && row['Événement Nom'].toString().trim()) {
-            const eventName = row['Événement Nom'].toString().trim();
-            const mappedId = eventNameToIdMap.get(eventName);
-            if (mappedId) {
-              eventId = mappedId;
-              console.log(`✅ Event trouvé par nom: ${eventName} -> ${mappedId}`);
-            } else {
-              console.log(`❌ Event non trouvé par nom: ${eventName}, noms disponibles:`, Array.from(eventNameToIdMap.keys()));
-            }
-          }
-          
-          // Priorité 4: Nom Événement (ancien format)
-          if (!eventId && row['Nom Événement'] && row['Nom Événement'].toString().trim()) {
-            const eventName = row['Nom Événement'].toString().trim();
-            const mappedId = eventNameToIdMap.get(eventName);
-            if (mappedId) {
-              eventId = mappedId;
-              console.log(`✅ Nom Événement trouvé: ${eventName} -> ${mappedId}`);
+              console.log(`❌ Événement non trouvé: "${eventName}"`);
+              console.log('📋 Événements disponibles:', Array.from(eventNameToIdMap.keys()));
             }
           }
 
-          // CORRECTION : Récupération robuste de la sous-catégorie
+          // Récupération de la sous-catégorie
           let subcategory: string | undefined;
-          
-          // Priorité 1: Sous-catégorie Code (nouveau format)
           if (row['Sous-catégorie Code'] && row['Sous-catégorie Code'].toString().trim()) {
             const subcatValue = row['Sous-catégorie Code'].toString().trim();
             if (subcatValue !== 'Sélectionner une sous-catégorie' && subcatValue !== '') {
               subcategory = subcatValue;
             }
           }
-          
-          // Priorité 2: Code sous-catégorie (ancien format)
-          if (!subcategory && row['Code sous-catégorie'] && row['Code sous-catégorie'].toString().trim()) {
-            const subcatValue = row['Code sous-catégorie'].toString().trim();
-            if (subcatValue !== 'Sélectionner une sous-catégorie' && subcatValue !== '') {
-              subcategory = subcatValue;
-            }
-          }
 
-          // CORRECTION : Récupération robuste de la catégorie
+          // Récupération de la catégorie
           let category = '';
-          
-          // Priorité 1: Catégorie Code (nouveau format)
           if (row['Catégorie Code'] && row['Catégorie Code'].toString().trim()) {
             category = row['Catégorie Code'].toString().trim();
-          }
-          // Priorité 2: Catégorie (ancien format)
-          else if (row['Catégorie'] && row['Catégorie'].toString().trim()) {
+          } else if (row['Catégorie'] && row['Catégorie'].toString().trim()) {
             category = row['Catégorie'].toString().trim();
           }
 
-          // CORRECTION : Récupération robuste du mode de paiement
+          // Récupération du mode de paiement
           let paymentMethod = 'CB';
-          
-          // Priorité 1: Mode Paiement Code (nouveau format)
           if (row['Mode Paiement Code'] && row['Mode Paiement Code'].toString().trim()) {
             paymentMethod = row['Mode Paiement Code'].toString().trim();
-          }
-          // Priorité 2: Mode de paiement (ancien format avec conversion)
-          else if (row['Mode de paiement'] && row['Mode de paiement'].toString().trim()) {
+          } else if (row['Mode de paiement'] && row['Mode de paiement'].toString().trim()) {
             paymentMethod = getPaymentMethodValue(row['Mode de paiement'].toString().trim());
           }
 
-          console.log(`Transaction ${index + 1} import:`, {
+          console.log(`📝 Transaction ${index + 1}:`, {
             description: row['Description'],
+            eventName,
             eventId,
             subcategory,
-            category,
-            paymentMethod,
-            eventExists: eventId ? eventIdMap.has(eventId) : false,
-            rawEventId: row['Événement ID'],
-            rawEventName: row['Événement Nom']
+            found: !!eventId
           });
 
           return {
@@ -390,13 +335,11 @@ export function parseExcelFile(file: File): Promise<ExportData> {
           exportDate: exportDateRow?.['Valeur'] || new Date().toISOString().split('T')[0]
         };
 
-        console.log('Import result final:', {
+        console.log('🎉 Import terminé:', {
           transactionsCount: result.transactions.length,
           eventsCount: result.events.length,
           transactionsWithEvents: result.transactions.filter(t => t.eventId).length,
-          transactionsWithSubcategories: result.transactions.filter(t => t.subcategory).length,
-          eventIds: result.events.map(e => e.id),
-          transactionEventIds: result.transactions.filter(t => t.eventId).map(t => t.eventId)
+          transactionsWithSubcategories: result.transactions.filter(t => t.subcategory).length
         });
         
         resolve(result);
