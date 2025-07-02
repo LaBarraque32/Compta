@@ -27,9 +27,9 @@ export function exportToExcel(data: ExportData): void {
 
   console.log('🎯 Export - Events mapping:', Array.from(eventsMap.entries()));
 
-  // Feuille Transactions - CORRECTION : Export correct du nom d'événement
+  // Feuille Transactions - SIMPLIFICATION : Export direct du nom d'événement
   const transactionsData = data.transactions.map(t => {
-    // CORRECTION : Récupérer le nom de l'événement associé
+    // SIMPLIFICATION : Récupérer directement le nom de l'événement
     let eventName = '';
     if (t.eventId && t.eventId.trim() !== '') {
       eventName = eventsMap.get(t.eventId) || '';
@@ -62,7 +62,7 @@ export function exportToExcel(data: ExportData): void {
       'Montant': t.amount,
       'Mode Paiement Code': t.paymentMethod,
       'Mode Paiement Nom': paymentMethodLabel,
-      'Événement': eventName, // CORRECTION : Cette valeur doit être remplie !
+      'Événement': eventName, // SIMPLIFICATION : Juste le nom, pas d'ID
       'Validé': t.isValidated ? 'Oui' : 'Non',
       'Exercice': t.exercice,
       'Créé le': new Date(t.createdAt).toLocaleDateString('fr-FR'),
@@ -76,10 +76,9 @@ export function exportToExcel(data: ExportData): void {
   const transactionsSheet = XLSX.utils.json_to_sheet(transactionsData);
   XLSX.utils.book_append_sheet(workbook, transactionsSheet, 'Transactions');
 
-  // Feuille Événements
+  // Feuille Événements - SIMPLIFICATION : Pas d'ID complexe
   const eventsData = data.events.map(e => ({
-    'ID': e.id,
-    'Nom': e.name,
+    'Nom': e.name, // SIMPLIFICATION : Le nom devient la clé principale
     'Date': e.date,
     'Type': e.type,
     'Budget': e.budget,
@@ -175,19 +174,18 @@ export function parseExcelFile(file: File): Promise<ExportData> {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
 
-        // Parse events first
+        // Parse events first - SIMPLIFICATION : Utiliser le nom comme clé unique
         const eventsSheet = workbook.Sheets['Événements'];
         const eventsJson = XLSX.utils.sheet_to_json(eventsSheet) as any[];
         
         const events: Event[] = eventsJson.map((row, index) => {
-          const originalId = row['ID'];
-          const eventId = originalId && originalId.toString().trim() 
-            ? originalId.toString().trim() 
-            : `imported-event-${Date.now()}-${index}`;
+          // SIMPLIFICATION : Générer un ID simple basé sur le nom
+          const eventName = row['Nom'] || '';
+          const eventId = `event-${eventName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${index}`;
             
           return {
             id: eventId,
-            name: row['Nom'] || '',
+            name: eventName,
             date: formatDateFromExcel(row['Date']),
             type: row['Type'] || 'concert',
             budget: parseFloat(row['Budget']) || 0,
@@ -200,59 +198,35 @@ export function parseExcelFile(file: File): Promise<ExportData> {
           };
         });
 
-        // Mapping par nom d'événement (insensible à la casse et aux espaces)
+        // SIMPLIFICATION : Mapping direct par nom d'événement
         const eventNameToIdMap = new Map();
         events.forEach(e => {
-          const normalizedName = e.name.trim().toLowerCase();
-          eventNameToIdMap.set(normalizedName, e.id);
+          if (e.name && e.name.trim()) {
+            const normalizedName = e.name.trim();
+            eventNameToIdMap.set(normalizedName, e.id);
+            console.log(`🎯 Event mapping: "${normalizedName}" -> ${e.id}`);
+          }
         });
 
         console.log('🎯 Events loaded:', events.map(e => ({ id: e.id, name: e.name })));
-        console.log('🎯 Event name mapping (normalized):', Array.from(eventNameToIdMap.entries()));
 
-        // Parse transactions - LOGIQUE AMÉLIORÉE
+        // Parse transactions - LOGIQUE ULTRA-SIMPLIFIÉE
         const transactionsSheet = workbook.Sheets['Transactions'];
         const transactionsJson = XLSX.utils.sheet_to_json(transactionsSheet) as any[];
         
         const transactions: Transaction[] = transactionsJson.map((row, index) => {
-          // AMÉLIORATION : Récupération robuste de l'événement
+          // SIMPLIFICATION : Récupération directe par nom d'événement
           let eventId: string | undefined;
           
-          // Récupérer le nom de l'événement depuis la colonne "Événement"
           const rawEventName = row['Événement'];
-          let eventName = '';
-          
-          if (rawEventName) {
-            if (typeof rawEventName === 'string') {
-              eventName = rawEventName.trim();
-            } else {
-              eventName = rawEventName.toString().trim();
-            }
-          }
-          
-          console.log(`📝 Transaction ${index + 1} - Raw event: "${rawEventName}" -> Cleaned: "${eventName}"`);
-          
-          if (eventName && eventName !== '') {
-            // Chercher l'événement par nom (insensible à la casse)
-            const normalizedEventName = eventName.toLowerCase();
-            eventId = eventNameToIdMap.get(normalizedEventName);
+          if (rawEventName && rawEventName.toString().trim()) {
+            const eventName = rawEventName.toString().trim();
+            eventId = eventNameToIdMap.get(eventName);
             
-            if (eventId) {
-              console.log(`✅ Événement trouvé: "${eventName}" -> ${eventId}`);
-            } else {
-              console.log(`❌ Événement non trouvé: "${eventName}"`);
-              console.log('📋 Événements disponibles:', events.map(e => e.name));
-              
-              // Tentative de correspondance partielle
-              const partialMatch = events.find(e => 
-                e.name.toLowerCase().includes(normalizedEventName) ||
-                normalizedEventName.includes(e.name.toLowerCase())
-              );
-              
-              if (partialMatch) {
-                eventId = partialMatch.id;
-                console.log(`🔍 Correspondance partielle trouvée: "${eventName}" -> "${partialMatch.name}" (${eventId})`);
-              }
+            console.log(`📝 Transaction ${index + 1}: "${row['Description']}" -> Événement: "${eventName}" -> ID: ${eventId || 'NON TROUVÉ'}`);
+            
+            if (!eventId) {
+              console.log(`❌ Événement "${eventName}" non trouvé dans:`, Array.from(eventNameToIdMap.keys()));
             }
           }
 
@@ -290,7 +264,7 @@ export function parseExcelFile(file: File): Promise<ExportData> {
             subcategory: subcategory,
             paymentMethod: paymentMethod as any,
             type: row['Type'] === 'recette' ? 'recette' : 'depense',
-            eventId: eventId,
+            eventId: eventId, // SIMPLIFICATION : Soit trouvé, soit undefined
             pieceNumber: row['N° Pièce'] || '',
             isValidated: row['Validé'] === 'Oui',
             exercice: row['Exercice'] || new Date().getFullYear().toString(),
@@ -413,7 +387,7 @@ function getPaymentMethodValue(label: string): string {
   return method?.value || 'CB';
 }
 
-// Fonctions utilitaires pour détecter les doublons
+// SIMPLIFICATION : Détection de doublons par nom d'événement
 export function isDuplicateTransaction(transaction: Transaction, existingTransactions: Transaction[]): boolean {
   return existingTransactions.some(existing => 
     existing.date === transaction.date &&
@@ -425,10 +399,9 @@ export function isDuplicateTransaction(transaction: Transaction, existingTransac
 }
 
 export function isDuplicateEvent(event: Event, existingEvents: Event[]): boolean {
+  // SIMPLIFICATION : Doublon = même nom (peu importe la date/type)
   return existingEvents.some(existing => 
-    existing.name === event.name &&
-    existing.date === event.date &&
-    existing.type === event.type
+    existing.name.trim().toLowerCase() === event.name.trim().toLowerCase()
   );
 }
 
