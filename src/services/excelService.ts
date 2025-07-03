@@ -188,6 +188,8 @@ export function parseExcelFile(file: File): Promise<ExportData> {
         const events: Event[] = eventsJson.map((row, index) => {
           const eventName = row['Nom'] || '';
           const eventId = `event-${eventName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${index}`;
+          
+          console.log(`🎭 Création événement ${index + 1}: "${eventName}" → ID: ${eventId}`);
             
           return {
             id: eventId,
@@ -223,14 +225,37 @@ export function parseExcelFile(file: File): Promise<ExportData> {
         }
 
         const transactionsJson = XLSX.utils.sheet_to_json(transactionsSheet) as any[];
-        console.log('📋 Transactions brutes du fichier Excel:', transactionsJson.slice(0, 2));
+        console.log('📋 Transactions brutes du fichier Excel (première):', transactionsJson[0]);
+        
+        // 🔍 DEBUGGING SPÉCIAL : Vérifier toutes les colonnes de la première transaction
+        if (transactionsJson.length > 0) {
+          const firstRow = transactionsJson[0];
+          console.log('🔍 TOUTES LES COLONNES de la première transaction:');
+          Object.keys(firstRow).forEach(key => {
+            console.log(`   "${key}": "${firstRow[key]}"`);
+          });
+        }
         
         const transactions: Transaction[] = transactionsJson.map((row, index) => {
           // 🎯 RÉCUPÉRATION DE L'ÉVÉNEMENT avec le mapping déjà créé
           let eventId: string | undefined;
           
-          const rawEventName = row['Événement'];
-          console.log(`📝 Transaction ${index + 1}: "${row['Description']}" - Événement brut: "${rawEventName}"`);
+          // 🔍 DEBUGGING : Vérifier TOUTES les variantes possibles de la colonne événement
+          const possibleEventColumns = ['Événement', 'Evenement', 'Event', 'événement', 'evenement'];
+          let rawEventName: any = null;
+          let foundColumn = '';
+          
+          for (const col of possibleEventColumns) {
+            if (row[col] !== undefined && row[col] !== null && row[col] !== '') {
+              rawEventName = row[col];
+              foundColumn = col;
+              break;
+            }
+          }
+          
+          console.log(`📝 Transaction ${index + 1}: "${row['Description']}"`);
+          console.log(`   🔍 Colonnes événement testées:`, possibleEventColumns.map(col => `${col}: "${row[col]}"`));
+          console.log(`   📍 Colonne trouvée: "${foundColumn}" = "${rawEventName}"`);
           
           if (rawEventName && rawEventName.toString().trim()) {
             const eventName = rawEventName.toString().trim();
@@ -239,7 +264,17 @@ export function parseExcelFile(file: File): Promise<ExportData> {
             console.log(`🔗 Recherche événement: "${eventName}" → ID: ${eventId || 'NON TROUVÉ'}`);
             
             if (!eventId) {
-              console.log(`❌ Événement "${eventName}" non trouvé dans le mapping:`, Array.from(eventNameToIdMap.keys()));
+              console.log(`❌ Événement "${eventName}" non trouvé dans le mapping:`);
+              console.log(`   Mapping disponible:`, Array.from(eventNameToIdMap.keys()));
+              
+              // 🔍 Recherche approximative
+              const similarEvents = Array.from(eventNameToIdMap.keys()).filter(name => 
+                name.toLowerCase().includes(eventName.toLowerCase()) || 
+                eventName.toLowerCase().includes(name.toLowerCase())
+              );
+              if (similarEvents.length > 0) {
+                console.log(`   🔍 Événements similaires trouvés:`, similarEvents);
+              }
             } else {
               console.log(`✅ Événement "${eventName}" trouvé → ID: ${eventId}`);
             }
@@ -293,7 +328,8 @@ export function parseExcelFile(file: File): Promise<ExportData> {
           console.log(`📄 Transaction finale ${index + 1}:`, {
             description: transaction.description,
             eventId: transaction.eventId,
-            eventName: rawEventName
+            eventName: rawEventName,
+            foundColumn: foundColumn
           });
 
           return transaction;
