@@ -89,6 +89,16 @@ const TransactionList: React.FC<TransactionListProps> = ({
       setAllTransactions(transactionsData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
       setCategories(categoriesData);
       setEvents(eventsData);
+
+      // 🔍 DEBUG : Vérifier les événements chargés
+      console.log('🎭 Événements chargés dans TransactionList:', eventsData.map(e => ({ id: e.id, name: e.name })));
+      
+      // 🔍 DEBUG : Vérifier les transactions avec eventId
+      const transactionsWithEvents = transactionsData.filter(t => t.eventId);
+      console.log('🔗 Transactions avec eventId:', transactionsWithEvents.map(t => ({ 
+        description: t.description, 
+        eventId: t.eventId 
+      })));
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -186,10 +196,19 @@ const TransactionList: React.FC<TransactionListProps> = ({
     return subcategory ? subcategory.name : subcategoryCode;
   };
 
-  // AJOUT : Fonction pour récupérer le nom de l'événement
-  const getEventName = (eventId: string) => {
+  // 🔧 CORRECTION : Fonction améliorée pour récupérer le nom de l'événement
+  const getEventName = (eventId: string | undefined) => {
+    if (!eventId || !eventId.trim()) {
+      return '';
+    }
+    
     const event = events.find(e => e.id === eventId);
-    return event ? event.name : '';
+    const eventName = event ? event.name : '';
+    
+    // 🔍 DEBUG : Log pour chaque recherche d'événement
+    console.log(`🔍 Recherche événement ID "${eventId}" → Nom: "${eventName}"`);
+    
+    return eventName;
   };
 
   const handleExportExcel = async () => {
@@ -664,105 +683,110 @@ const TransactionList: React.FC<TransactionListProps> = ({
                   </td>
                 </tr>
               ) : (
-                filteredTransactions.map((transaction) => (
-                  <tr 
-                    key={transaction.id} 
-                    className="hover:bg-gray-50 transition-colors cursor-pointer"
-                    onClick={() => handleEditTransaction(transaction)}
-                  >
-                    <td className="px-4 py-3 text-sm text-gray-900">
-                      <div className="flex items-center">
-                        <Calendar size={14} className="mr-2 text-gray-400" />
-                        {new Date(transaction.date).toLocaleDateString('fr-FR')}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                      {transaction.pieceNumber}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">
-                      <div className="max-w-xs">
-                        <div className="truncate font-medium">{transaction.description}</div>
-                        {/* AMÉLIORATION : Affichage de l'événement associé */}
-                        {transaction.eventId && (
-                          <div className="flex items-center text-xs text-blue-600 mt-1">
-                            <Users size={12} className="mr-1" />
-                            {getEventName(transaction.eventId)}
-                          </div>
-                        )}
-                        {transaction.attachment && (
-                          <FileText size={14} className="inline ml-1 text-blue-500" />
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">
-                      <div>
-                        <div className="font-medium">{getCategoryName(transaction.category)}</div>
-                        {transaction.subcategory && (
-                          <div className="text-xs text-gray-500">
-                            {getSubcategoryName(transaction.category, transaction.subcategory)}
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm font-semibold">
-                      <span className={
-                        transaction.type === 'recette' ? 'text-green-600' : 'text-red-600'
-                      }>
-                        {transaction.type === 'recette' ? '+' : '-'}
-                        {transaction.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">
-                      {PAYMENT_METHODS.find(pm => pm.value === transaction.paymentMethod)?.label}
-                    </td>
-                    <td className="px-4 py-3 text-sm">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        transaction.isValidated 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {transaction.isValidated ? 'Validé' : 'En attente'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm">
-                      <div className="flex items-center space-x-2" onClick={(e) => e.stopPropagation()}>
-                        {!transaction.isValidated ? (
+                filteredTransactions.map((transaction) => {
+                  // 🔧 CORRECTION : Récupérer le nom de l'événement pour chaque transaction
+                  const eventName = getEventName(transaction.eventId);
+                  
+                  return (
+                    <tr 
+                      key={transaction.id} 
+                      className="hover:bg-gray-50 transition-colors cursor-pointer"
+                      onClick={() => handleEditTransaction(transaction)}
+                    >
+                      <td className="px-4 py-3 text-sm text-gray-900">
+                        <div className="flex items-center">
+                          <Calendar size={14} className="mr-2 text-gray-400" />
+                          {new Date(transaction.date).toLocaleDateString('fr-FR')}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                        {transaction.pieceNumber}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-900">
+                        <div className="max-w-xs">
+                          <div className="truncate font-medium">{transaction.description}</div>
+                          {/* 🔧 CORRECTION : Affichage conditionnel de l'événement */}
+                          {eventName && (
+                            <div className="flex items-center text-xs text-blue-600 mt-1">
+                              <Users size={12} className="mr-1" />
+                              {eventName}
+                            </div>
+                          )}
+                          {transaction.attachment && (
+                            <FileText size={14} className="inline ml-1 text-blue-500" />
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-900">
+                        <div>
+                          <div className="font-medium">{getCategoryName(transaction.category)}</div>
+                          {transaction.subcategory && (
+                            <div className="text-xs text-gray-500">
+                              {getSubcategoryName(transaction.category, transaction.subcategory)}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm font-semibold">
+                        <span className={
+                          transaction.type === 'recette' ? 'text-green-600' : 'text-red-600'
+                        }>
+                          {transaction.type === 'recette' ? '+' : '-'}
+                          {transaction.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-900">
+                        {PAYMENT_METHODS.find(pm => pm.value === transaction.paymentMethod)?.label}
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          transaction.isValidated 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {transaction.isValidated ? 'Validé' : 'En attente'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        <div className="flex items-center space-x-2" onClick={(e) => e.stopPropagation()}>
+                          {!transaction.isValidated ? (
+                            <button
+                              onClick={() => handleValidateTransaction(transaction.id, true)}
+                              className="p-1 text-green-600 hover:bg-green-50 rounded transition-colors"
+                              title="Valider"
+                            >
+                              <Check size={16} />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleValidateTransaction(transaction.id, false)}
+                              className="p-1 text-yellow-600 hover:bg-yellow-50 rounded transition-colors"
+                              title="Mettre en attente"
+                            >
+                              <X size={16} />
+                            </button>
+                          )}
+                          
                           <button
-                            onClick={() => handleValidateTransaction(transaction.id, true)}
-                            className="p-1 text-green-600 hover:bg-green-50 rounded transition-colors"
-                            title="Valider"
+                            onClick={() => handleEditTransaction(transaction)}
+                            className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                            title="Modifier"
                           >
-                            <Check size={16} />
+                            <Edit size={16} />
                           </button>
-                        ) : (
+                          
                           <button
-                            onClick={() => handleValidateTransaction(transaction.id, false)}
-                            className="p-1 text-yellow-600 hover:bg-yellow-50 rounded transition-colors"
-                            title="Mettre en attente"
+                            onClick={() => handleDeleteTransaction(transaction.id)}
+                            className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                            title="Supprimer"
                           >
-                            <X size={16} />
+                            <Trash2 size={16} />
                           </button>
-                        )}
-                        
-                        <button
-                          onClick={() => handleEditTransaction(transaction)}
-                          className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                          title="Modifier"
-                        >
-                          <Edit size={16} />
-                        </button>
-                        
-                        <button
-                          onClick={() => handleDeleteTransaction(transaction.id)}
-                          className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
-                          title="Supprimer"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
