@@ -174,12 +174,18 @@ export function parseExcelFile(file: File): Promise<ExportData> {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
 
-        // Parse events first - SIMPLIFICATION : Utiliser le nom comme clé unique
+        console.log('🔍 Feuilles disponibles:', workbook.SheetNames);
+
+        // 1️⃣ ÉTAPE 1 : Parse events FIRST et créer le mapping
         const eventsSheet = workbook.Sheets['Événements'];
+        if (!eventsSheet) {
+          throw new Error('Feuille "Événements" non trouvée');
+        }
+
         const eventsJson = XLSX.utils.sheet_to_json(eventsSheet) as any[];
+        console.log('📋 Événements bruts du fichier Excel:', eventsJson);
         
         const events: Event[] = eventsJson.map((row, index) => {
-          // SIMPLIFICATION : Générer un ID simple basé sur le nom
           const eventName = row['Nom'] || '';
           const eventId = `event-${eventName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${index}`;
             
@@ -198,36 +204,47 @@ export function parseExcelFile(file: File): Promise<ExportData> {
           };
         });
 
-        // SIMPLIFICATION : Mapping direct par nom d'événement
-        const eventNameToIdMap = new Map();
-        events.forEach(e => {
-          if (e.name && e.name.trim()) {
-            const normalizedName = e.name.trim();
-            eventNameToIdMap.set(normalizedName, e.id);
-            console.log(`🎯 Event mapping: "${normalizedName}" -> ${e.id}`);
+        // 2️⃣ ÉTAPE 2 : Créer le mapping NOM → ID AVANT de parser les transactions
+        const eventNameToIdMap = new Map<string, string>();
+        events.forEach(event => {
+          if (event.name && event.name.trim()) {
+            const normalizedName = event.name.trim();
+            eventNameToIdMap.set(normalizedName, event.id);
+            console.log(`🎯 Mapping créé: "${normalizedName}" → ${event.id}`);
           }
         });
 
-        console.log('🎯 Events loaded:', events.map(e => ({ id: e.id, name: e.name })));
+        console.log('📊 Mapping final des événements:', Array.from(eventNameToIdMap.entries()));
 
-        // Parse transactions - LOGIQUE ULTRA-SIMPLIFIÉE
+        // 3️⃣ ÉTAPE 3 : Parse transactions avec le mapping déjà créé
         const transactionsSheet = workbook.Sheets['Transactions'];
+        if (!transactionsSheet) {
+          throw new Error('Feuille "Transactions" non trouvée');
+        }
+
         const transactionsJson = XLSX.utils.sheet_to_json(transactionsSheet) as any[];
+        console.log('📋 Transactions brutes du fichier Excel:', transactionsJson.slice(0, 2));
         
         const transactions: Transaction[] = transactionsJson.map((row, index) => {
-          // SIMPLIFICATION : Récupération directe par nom d'événement
+          // 🎯 RÉCUPÉRATION DE L'ÉVÉNEMENT avec le mapping déjà créé
           let eventId: string | undefined;
           
           const rawEventName = row['Événement'];
+          console.log(`📝 Transaction ${index + 1}: "${row['Description']}" - Événement brut: "${rawEventName}"`);
+          
           if (rawEventName && rawEventName.toString().trim()) {
             const eventName = rawEventName.toString().trim();
             eventId = eventNameToIdMap.get(eventName);
             
-            console.log(`📝 Transaction ${index + 1}: "${row['Description']}" -> Événement: "${eventName}" -> ID: ${eventId || 'NON TROUVÉ'}`);
+            console.log(`🔗 Recherche événement: "${eventName}" → ID: ${eventId || 'NON TROUVÉ'}`);
             
             if (!eventId) {
-              console.log(`❌ Événement "${eventName}" non trouvé dans:`, Array.from(eventNameToIdMap.keys()));
+              console.log(`❌ Événement "${eventName}" non trouvé dans le mapping:`, Array.from(eventNameToIdMap.keys()));
+            } else {
+              console.log(`✅ Événement "${eventName}" trouvé → ID: ${eventId}`);
             }
+          } else {
+            console.log(`ℹ️ Pas d'événement pour la transaction "${row['Description']}"`);
           }
 
           // Récupération de la sous-catégorie
@@ -255,7 +272,7 @@ export function parseExcelFile(file: File): Promise<ExportData> {
             paymentMethod = getPaymentMethodValue(row['Mode de paiement'].toString().trim());
           }
 
-          return {
+          const transaction = {
             id: `imported-trans-${Date.now()}-${index}`,
             date: formatDateFromExcel(row['Date']),
             amount: parseFloat(row['Montant']) || 0,
@@ -264,7 +281,7 @@ export function parseExcelFile(file: File): Promise<ExportData> {
             subcategory: subcategory,
             paymentMethod: paymentMethod as any,
             type: row['Type'] === 'recette' ? 'recette' : 'depense',
-            eventId: eventId, // SIMPLIFICATION : Soit trouvé, soit undefined
+            eventId: eventId, // 🎯 Maintenant correctement assigné
             pieceNumber: row['N° Pièce'] || '',
             isValidated: row['Validé'] === 'Oui',
             exercice: row['Exercice'] || new Date().getFullYear().toString(),
@@ -272,6 +289,14 @@ export function parseExcelFile(file: File): Promise<ExportData> {
             updatedAt: new Date().toISOString(),
             attachment: row['Justificatif'] || undefined
           };
+
+          console.log(`📄 Transaction finale ${index + 1}:`, {
+            description: transaction.description,
+            eventId: transaction.eventId,
+            eventName: rawEventName
+          });
+
+          return transaction;
         });
 
         // Parse categories
@@ -336,16 +361,21 @@ export function parseExcelFile(file: File): Promise<ExportData> {
           exportDate: exportDateRow?.['Valeur'] || new Date().toISOString().split('T')[0]
         };
 
-        console.log('🎉 Import terminé:', {
-          transactionsCount: result.transactions.length,
-          eventsCount: result.events.length,
-          transactionsWithEvents: result.transactions.filter(t => t.eventId).length,
-          transactionsWithSubcategories: result.transactions.filter(t => t.subcategory).length
+        // 🎉 RÉSUMÉ FINAL
+        const transactionsWithEvents = result.transactions.filter(t => t.eventId);
+        console.log('🎉 IMPORT TERMINÉ - RÉSUMÉ:');
+        console.log(`📊 ${result.transactions.length} transactions importées`);
+        console.log(`🎭 ${result.events.length} événements importés`);
+        console.log(`🔗 ${transactionsWithEvents.length} transactions liées à un événement`);
+        console.log('🔗 Détail des liaisons:');
+        transactionsWithEvents.forEach(t => {
+          const eventName = events.find(e => e.id === t.eventId)?.name;
+          console.log(`   - "${t.description}" → "${eventName}"`);
         });
         
         resolve(result);
       } catch (error) {
-        console.error('Excel parsing error:', error);
+        console.error('❌ Erreur parsing Excel:', error);
         reject(new Error('Erreur lors de la lecture du fichier Excel: ' + error));
       }
     };
