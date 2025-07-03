@@ -90,15 +90,25 @@ const TransactionList: React.FC<TransactionListProps> = ({
       setCategories(categoriesData);
       setEvents(eventsData);
 
-      // 🔍 DEBUG : Vérifier les événements chargés
-      console.log('🎭 Événements chargés dans TransactionList:', eventsData.map(e => ({ id: e.id, name: e.name })));
+      // 🔍 DEBUG COMPLET : Vérifier TOUT
+      console.log('🎭 ÉVÉNEMENTS chargés:', eventsData.map(e => ({ id: e.id, name: e.name })));
+      console.log('📊 TRANSACTIONS chargées:', transactionsData.length);
       
-      // 🔍 DEBUG : Vérifier les transactions avec eventId
-      const transactionsWithEvents = transactionsData.filter(t => t.eventId);
-      console.log('🔗 Transactions avec eventId:', transactionsWithEvents.map(t => ({ 
+      // 🔍 Vérifier spécifiquement les transactions avec eventId
+      const transactionsWithEvents = transactionsData.filter(t => t.eventId && t.eventId.trim() !== '');
+      console.log('🔗 TRANSACTIONS avec eventId:', transactionsWithEvents.map(t => ({ 
+        id: t.id,
         description: t.description, 
-        eventId: t.eventId 
+        eventId: t.eventId,
+        exercice: t.exercice
       })));
+
+      // 🔍 Pour chaque transaction avec eventId, vérifier si l'événement existe
+      transactionsWithEvents.forEach(t => {
+        const event = eventsData.find(e => e.id === t.eventId);
+        console.log(`🔍 Transaction "${t.description}" (${t.eventId}) → Événement trouvé: ${event ? event.name : 'NON TROUVÉ'}`);
+      });
+
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -151,6 +161,12 @@ const TransactionList: React.FC<TransactionListProps> = ({
     }
 
     setFilteredTransactions(filtered);
+
+    // 🔍 DEBUG : Vérifier les transactions filtrées
+    const filteredWithEvents = filtered.filter(t => t.eventId && t.eventId.trim() !== '');
+    console.log(`🔍 TRANSACTIONS FILTRÉES avec eventId (exercice ${selectedExercice}):`, 
+      filteredWithEvents.map(t => ({ description: t.description, eventId: t.eventId }))
+    );
   };
 
   const handleValidateTransaction = async (id: string, isValidated: boolean) => {
@@ -196,17 +212,23 @@ const TransactionList: React.FC<TransactionListProps> = ({
     return subcategory ? subcategory.name : subcategoryCode;
   };
 
-  // 🔧 CORRECTION : Fonction améliorée pour récupérer le nom de l'événement
+  // 🔧 FONCTION ULTRA-SIMPLIFIÉE pour récupérer le nom de l'événement
   const getEventName = (eventId: string | undefined) => {
-    if (!eventId || !eventId.trim()) {
+    // 🔍 DEBUG : Log détaillé pour chaque appel
+    console.log(`🔍 getEventName appelé avec eventId: "${eventId}"`);
+    
+    if (!eventId || eventId.trim() === '') {
+      console.log(`   ❌ eventId vide ou undefined`);
       return '';
     }
+    
+    console.log(`   🔍 Recherche dans ${events.length} événements...`);
+    console.log(`   📋 Événements disponibles:`, events.map(e => ({ id: e.id, name: e.name })));
     
     const event = events.find(e => e.id === eventId);
     const eventName = event ? event.name : '';
     
-    // 🔍 DEBUG : Log pour chaque recherche d'événement
-    console.log(`🔍 Recherche événement ID "${eventId}" → Nom: "${eventName}"`);
+    console.log(`   ${event ? '✅' : '❌'} Résultat: "${eventName}"`);
     
     return eventName;
   };
@@ -684,8 +706,16 @@ const TransactionList: React.FC<TransactionListProps> = ({
                 </tr>
               ) : (
                 filteredTransactions.map((transaction) => {
-                  // 🔧 CORRECTION : Récupérer le nom de l'événement pour chaque transaction
+                  // 🔧 RÉCUPÉRATION DU NOM D'ÉVÉNEMENT pour chaque transaction
                   const eventName = getEventName(transaction.eventId);
+                  
+                  // 🔍 DEBUG : Log pour chaque transaction affichée
+                  console.log(`🖥️ AFFICHAGE transaction "${transaction.description}":`, {
+                    eventId: transaction.eventId,
+                    eventName: eventName,
+                    hasEventId: !!transaction.eventId,
+                    willShowEvent: !!eventName
+                  });
                   
                   return (
                     <tr 
@@ -705,11 +735,11 @@ const TransactionList: React.FC<TransactionListProps> = ({
                       <td className="px-4 py-3 text-sm text-gray-900">
                         <div className="max-w-xs">
                           <div className="truncate font-medium">{transaction.description}</div>
-                          {/* 🔧 CORRECTION : Affichage conditionnel de l'événement */}
-                          {eventName && (
+                          {/* 🔧 AFFICHAGE DE L'ÉVÉNEMENT - Version ultra-simple */}
+                          {eventName && eventName.trim() !== '' && (
                             <div className="flex items-center text-xs text-blue-600 mt-1">
                               <Users size={12} className="mr-1" />
-                              {eventName}
+                              <span>{eventName}</span>
                             </div>
                           )}
                           {transaction.attachment && (
