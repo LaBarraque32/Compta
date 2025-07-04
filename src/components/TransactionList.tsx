@@ -114,6 +114,13 @@ const TransactionList: React.FC<TransactionListProps> = ({
     }
   };
 
+  // 🎯 NOUVELLE FONCTION : Rechargement avec délai pour IndexedDB
+  const loadDataWithDelay = async (delay: number = 100) => {
+    console.log(`⏱️ Rechargement avec délai de ${delay}ms...`);
+    await new Promise(resolve => setTimeout(resolve, delay));
+    await loadData();
+  };
+
   const applyFilters = () => {
     let filtered = allTransactions;
 
@@ -381,9 +388,9 @@ const TransactionList: React.FC<TransactionListProps> = ({
         `${importedCounts.categories} catégories\n` +
         `${importedCounts.members} adhérents`);
 
-      // 🎯 CORRECTION CRITIQUE : Forcer le rechargement COMPLET après import
+      // 🎯 CORRECTION CRITIQUE : Rechargement avec délai pour IndexedDB
       console.log('🔄 RECHARGEMENT COMPLET après import...');
-      await loadData();
+      await loadDataWithDelay(200); // Délai de 200ms pour laisser IndexedDB se synchroniser
       setShowImportOptions(false);
     } catch (error) {
       console.error('Error importing Excel:', error);
