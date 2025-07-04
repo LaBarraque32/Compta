@@ -381,7 +381,9 @@ const TransactionList: React.FC<TransactionListProps> = ({
         `${importedCounts.categories} catégories\n` +
         `${importedCounts.members} adhérents`);
 
-      loadData();
+      // 🎯 CORRECTION CRITIQUE : Forcer le rechargement COMPLET après import
+      console.log('🔄 RECHARGEMENT COMPLET après import...');
+      await loadData();
       setShowImportOptions(false);
     } catch (error) {
       console.error('Error importing Excel:', error);
