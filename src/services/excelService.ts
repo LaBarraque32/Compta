@@ -176,7 +176,7 @@ export function parseExcelFile(file: File): Promise<ExportData> {
 
         console.log('🔍 Feuilles disponibles:', workbook.SheetNames);
 
-        // 1️⃣ ÉTAPE 1 : Parse events FIRST et créer le mapping STABLE
+        // 🎯 SOLUTION DÉFINITIVE : Créer les événements ET le mapping en une seule passe
         const eventsSheet = workbook.Sheets['Événements'];
         if (!eventsSheet) {
           throw new Error('Feuille "Événements" non trouvée');
@@ -185,18 +185,24 @@ export function parseExcelFile(file: File): Promise<ExportData> {
         const eventsJson = XLSX.utils.sheet_to_json(eventsSheet) as any[];
         console.log('📋 Événements bruts du fichier Excel:', eventsJson);
         
-        // 🎯 CORRECTION : Créer des IDs STABLES basés sur le nom + timestamp unique
+        // 🎯 ÉTAPE 1 : Créer les événements avec des IDs basés sur le nom normalisé
         const baseTimestamp = Date.now();
-        const events: Event[] = eventsJson.map((row, index) => {
+        const events: Event[] = [];
+        const eventNameToIdMap = new Map<string, string>();
+        
+        eventsJson.forEach((row, index) => {
           const eventName = row['Nom'] || '';
-          // 🎯 ID STABLE : nom normalisé + index pour garantir l'unicité
-          const eventId = `event-${eventName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${index}`;
+          if (!eventName.trim()) return; // Ignorer les lignes vides
           
-          console.log(`🎭 Création événement ${index + 1}: "${eventName}" → ID: ${eventId}`);
-            
-          return {
+          // 🎯 ID BASÉ SUR LE NOM NORMALISÉ pour garantir la cohérence
+          const normalizedName = eventName.trim().toLowerCase().replace(/[^a-z0-9]/g, '-');
+          const eventId = `event-${normalizedName}-${baseTimestamp}`;
+          
+          console.log(`🎭 Création événement: "${eventName}" → ID: ${eventId}`);
+          
+          const event: Event = {
             id: eventId,
-            name: eventName,
+            name: eventName.trim(),
             date: formatDateFromExcel(row['Date']),
             type: row['Type'] || 'concert',
             budget: parseFloat(row['Budget']) || 0,
@@ -207,21 +213,16 @@ export function parseExcelFile(file: File): Promise<ExportData> {
             exercice: row['Exercice'] || new Date().getFullYear().toString(),
             description: row['Description'] || undefined
           };
-        });
-
-        // 2️⃣ ÉTAPE 2 : Créer le mapping NOM → ID avec les VRAIS IDs créés
-        const eventNameToIdMap = new Map<string, string>();
-        events.forEach(event => {
-          if (event.name && event.name.trim()) {
-            const normalizedName = event.name.trim();
-            eventNameToIdMap.set(normalizedName, event.id);
-            console.log(`🎯 Mapping créé: "${normalizedName}" → ${event.id}`);
-          }
+          
+          events.push(event);
+          eventNameToIdMap.set(eventName.trim(), eventId);
+          
+          console.log(`🎯 Mapping créé: "${eventName.trim()}" → ${eventId}`);
         });
 
         console.log('📊 Mapping final des événements:', Array.from(eventNameToIdMap.entries()));
 
-        // 3️⃣ ÉTAPE 3 : Parse transactions avec le mapping CORRECT
+        // 🎯 ÉTAPE 2 : Parse transactions avec le mapping CORRECT
         const transactionsSheet = workbook.Sheets['Transactions'];
         if (!transactionsSheet) {
           throw new Error('Feuille "Transactions" non trouvée');
@@ -373,7 +374,7 @@ export function parseExcelFile(file: File): Promise<ExportData> {
           exportDate: exportDateRow?.['Valeur'] || new Date().toISOString().split('T')[0]
         };
 
-        // 🎉 RÉSUMÉ FINAL
+        // 🎉 RÉSUMÉ FINAL avec VÉRIFICATION
         const transactionsWithEvents = result.transactions.filter(t => t.eventId);
         console.log('🎉 IMPORT TERMINÉ - RÉSUMÉ:');
         console.log(`📊 ${result.transactions.length} transactions importées`);
@@ -383,6 +384,15 @@ export function parseExcelFile(file: File): Promise<ExportData> {
         transactionsWithEvents.forEach(t => {
           const eventName = events.find(e => e.id === t.eventId)?.name;
           console.log(`   - "${t.description}" → "${eventName}"`);
+        });
+        
+        // 🎯 VÉRIFICATION FINALE : Les IDs correspondent-ils ?
+        console.log('🔍 VÉRIFICATION FINALE DES IDs:');
+        events.forEach(event => {
+          console.log(`   Événement: "${event.name}" → ID: ${event.id}`);
+        });
+        transactionsWithEvents.forEach(t => {
+          console.log(`   Transaction: "${t.description}" → eventId: ${t.eventId}`);
         });
         
         resolve(result);
