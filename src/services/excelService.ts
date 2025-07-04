@@ -176,7 +176,7 @@ export function parseExcelFile(file: File): Promise<ExportData> {
 
         console.log('🔍 Feuilles disponibles:', workbook.SheetNames);
 
-        // 1️⃣ ÉTAPE 1 : Parse events FIRST et créer le mapping
+        // 1️⃣ ÉTAPE 1 : Parse events FIRST et créer le mapping STABLE
         const eventsSheet = workbook.Sheets['Événements'];
         if (!eventsSheet) {
           throw new Error('Feuille "Événements" non trouvée');
@@ -185,8 +185,11 @@ export function parseExcelFile(file: File): Promise<ExportData> {
         const eventsJson = XLSX.utils.sheet_to_json(eventsSheet) as any[];
         console.log('📋 Événements bruts du fichier Excel:', eventsJson);
         
+        // 🎯 CORRECTION : Créer des IDs STABLES basés sur le nom + timestamp unique
+        const baseTimestamp = Date.now();
         const events: Event[] = eventsJson.map((row, index) => {
           const eventName = row['Nom'] || '';
+          // 🎯 ID STABLE : nom normalisé + index pour garantir l'unicité
           const eventId = `event-${eventName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${index}`;
           
           console.log(`🎭 Création événement ${index + 1}: "${eventName}" → ID: ${eventId}`);
@@ -206,7 +209,7 @@ export function parseExcelFile(file: File): Promise<ExportData> {
           };
         });
 
-        // 2️⃣ ÉTAPE 2 : Créer le mapping NOM → ID AVANT de parser les transactions
+        // 2️⃣ ÉTAPE 2 : Créer le mapping NOM → ID avec les VRAIS IDs créés
         const eventNameToIdMap = new Map<string, string>();
         events.forEach(event => {
           if (event.name && event.name.trim()) {
@@ -218,7 +221,7 @@ export function parseExcelFile(file: File): Promise<ExportData> {
 
         console.log('📊 Mapping final des événements:', Array.from(eventNameToIdMap.entries()));
 
-        // 3️⃣ ÉTAPE 3 : Parse transactions avec le mapping déjà créé
+        // 3️⃣ ÉTAPE 3 : Parse transactions avec le mapping CORRECT
         const transactionsSheet = workbook.Sheets['Transactions'];
         if (!transactionsSheet) {
           throw new Error('Feuille "Transactions" non trouvée');
@@ -227,35 +230,15 @@ export function parseExcelFile(file: File): Promise<ExportData> {
         const transactionsJson = XLSX.utils.sheet_to_json(transactionsSheet) as any[];
         console.log('📋 Transactions brutes du fichier Excel (première):', transactionsJson[0]);
         
-        // 🔍 DEBUGGING SPÉCIAL : Vérifier toutes les colonnes de la première transaction
-        if (transactionsJson.length > 0) {
-          const firstRow = transactionsJson[0];
-          console.log('🔍 TOUTES LES COLONNES de la première transaction:');
-          Object.keys(firstRow).forEach(key => {
-            console.log(`   "${key}": "${firstRow[key]}"`);
-          });
-        }
-        
         const transactions: Transaction[] = transactionsJson.map((row, index) => {
-          // 🎯 RÉCUPÉRATION DE L'ÉVÉNEMENT avec le mapping déjà créé
+          // 🎯 RÉCUPÉRATION DE L'ÉVÉNEMENT avec le mapping CORRECT
           let eventId: string | undefined;
           
-          // 🔍 DEBUGGING : Vérifier TOUTES les variantes possibles de la colonne événement
-          const possibleEventColumns = ['Événement', 'Evenement', 'Event', 'événement', 'evenement'];
-          let rawEventName: any = null;
-          let foundColumn = '';
-          
-          for (const col of possibleEventColumns) {
-            if (row[col] !== undefined && row[col] !== null && row[col] !== '') {
-              rawEventName = row[col];
-              foundColumn = col;
-              break;
-            }
-          }
+          // Récupérer le nom de l'événement depuis Excel
+          const rawEventName = row['Événement'];
           
           console.log(`📝 Transaction ${index + 1}: "${row['Description']}"`);
-          console.log(`   🔍 Colonnes événement testées:`, possibleEventColumns.map(col => `${col}: "${row[col]}"`));
-          console.log(`   📍 Colonne trouvée: "${foundColumn}" = "${rawEventName}"`);
+          console.log(`   📍 Événement brut: "${rawEventName}"`);
           
           if (rawEventName && rawEventName.toString().trim()) {
             const eventName = rawEventName.toString().trim();
@@ -266,15 +249,6 @@ export function parseExcelFile(file: File): Promise<ExportData> {
             if (!eventId) {
               console.log(`❌ Événement "${eventName}" non trouvé dans le mapping:`);
               console.log(`   Mapping disponible:`, Array.from(eventNameToIdMap.keys()));
-              
-              // 🔍 Recherche approximative
-              const similarEvents = Array.from(eventNameToIdMap.keys()).filter(name => 
-                name.toLowerCase().includes(eventName.toLowerCase()) || 
-                eventName.toLowerCase().includes(name.toLowerCase())
-              );
-              if (similarEvents.length > 0) {
-                console.log(`   🔍 Événements similaires trouvés:`, similarEvents);
-              }
             } else {
               console.log(`✅ Événement "${eventName}" trouvé → ID: ${eventId}`);
             }
@@ -307,8 +281,11 @@ export function parseExcelFile(file: File): Promise<ExportData> {
             paymentMethod = getPaymentMethodValue(row['Mode de paiement'].toString().trim());
           }
 
+          // 🎯 GÉNÉRATION D'ID UNIQUE pour la transaction
+          const transactionId = `imported-trans-${baseTimestamp}-${index}`;
+
           const transaction = {
-            id: `imported-trans-${Date.now()}-${index}`,
+            id: transactionId,
             date: formatDateFromExcel(row['Date']),
             amount: parseFloat(row['Montant']) || 0,
             description: row['Description'] || '',
@@ -316,7 +293,7 @@ export function parseExcelFile(file: File): Promise<ExportData> {
             subcategory: subcategory,
             paymentMethod: paymentMethod as any,
             type: row['Type'] === 'recette' ? 'recette' : 'depense',
-            eventId: eventId, // 🎯 Maintenant correctement assigné
+            eventId: eventId, // 🎯 Maintenant avec le BON ID
             pieceNumber: row['N° Pièce'] || '',
             isValidated: row['Validé'] === 'Oui',
             exercice: row['Exercice'] || new Date().getFullYear().toString(),
@@ -328,8 +305,7 @@ export function parseExcelFile(file: File): Promise<ExportData> {
           console.log(`📄 Transaction finale ${index + 1}:`, {
             description: transaction.description,
             eventId: transaction.eventId,
-            eventName: rawEventName,
-            foundColumn: foundColumn
+            eventName: rawEventName
           });
 
           return transaction;
@@ -371,7 +347,7 @@ export function parseExcelFile(file: File): Promise<ExportData> {
         const membersJson = XLSX.utils.sheet_to_json(membersSheet) as any[];
         
         const members: Member[] = membersJson.map((row, index) => ({
-          id: `imported-member-${Date.now()}-${index}`,
+          id: `imported-member-${baseTimestamp}-${index}`,
           firstName: row['Prénom'] || '',
           lastName: row['Nom'] || '',
           email: row['Email'] || '',
