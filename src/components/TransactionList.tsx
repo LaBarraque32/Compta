@@ -349,19 +349,36 @@ const TransactionList: React.FC<TransactionListProps> = ({
         }
       }
 
-      // 🎯 IMPORTER LES ÉVÉNEMENTS EN PREMIER (avant les transactions)
+      // 🎯 ÉTAPE CRITIQUE : Importer les événements ET créer le mapping nom → ID
       console.log('🎭 IMPORT DES ÉVÉNEMENTS...');
+      const eventNameToIdMap = new Map<string, string>();
+      
       for (const event of importData.events) {
         try {
           if (clearData || !isDuplicateEvent(event, existingEvents)) {
             const eventId = await addEvent(event);
             console.log(`✅ Événement importé: "${event.name}" → ID: ${eventId}`);
+            
+            // 🎯 CRÉER LE MAPPING nom → nouvel ID
+            eventNameToIdMap.set(event.name.trim(), eventId);
+            
             importedCounts.events++;
+          } else {
+            // 🎯 MÊME POUR LES DOUBLONS, créer le mapping avec l'ID existant
+            const existingEvent = existingEvents.find(e => 
+              e.name.trim().toLowerCase() === event.name.trim().toLowerCase()
+            );
+            if (existingEvent) {
+              eventNameToIdMap.set(event.name.trim(), existingEvent.id);
+              console.log(`🔄 Événement existant: "${event.name}" → ID: ${existingEvent.id}`);
+            }
           }
         } catch (error) {
           console.warn('Event import error:', error);
         }
       }
+
+      console.log('🗺️ MAPPING FINAL nom → ID:', Array.from(eventNameToIdMap.entries()));
 
       // Importer les adhérents
       for (const member of importData.members) {
@@ -375,13 +392,36 @@ const TransactionList: React.FC<TransactionListProps> = ({
         }
       }
 
-      // 🎯 IMPORTER LES TRANSACTIONS EN DERNIER
+      // 🎯 ÉTAPE CRITIQUE : Importer les transactions avec les BONS IDs d'événements
       console.log('📝 IMPORT DES TRANSACTIONS...');
       for (const transaction of importData.transactions) {
         try {
           if (clearData || !isDuplicateTransaction(transaction, existingTransactions)) {
-            const transactionId = await addTransaction(transaction);
-            console.log(`✅ Transaction importée: "${transaction.description}" → eventId: ${transaction.eventId}`);
+            
+            // 🎯 CORRECTION CRITIQUE : Remplacer l'eventId par le bon ID
+            let correctedTransaction = { ...transaction };
+            
+            if (transaction.eventId) {
+              // Trouver le nom de l'événement correspondant à cet ID dans les données importées
+              const originalEvent = importData.events.find(e => e.id === transaction.eventId);
+              if (originalEvent) {
+                // Récupérer le NOUVEL ID basé sur le nom
+                const newEventId = eventNameToIdMap.get(originalEvent.name.trim());
+                if (newEventId) {
+                  correctedTransaction.eventId = newEventId;
+                  console.log(`🔗 Transaction "${transaction.description}": ${originalEvent.name} → ${newEventId}`);
+                } else {
+                  console.log(`❌ Pas de mapping trouvé pour "${originalEvent.name}"`);
+                  correctedTransaction.eventId = undefined;
+                }
+              } else {
+                console.log(`❌ Événement original non trouvé pour ID: ${transaction.eventId}`);
+                correctedTransaction.eventId = undefined;
+              }
+            }
+            
+            await addTransaction(correctedTransaction);
+            console.log(`✅ Transaction importée: "${correctedTransaction.description}" → eventId: ${correctedTransaction.eventId}`);
             importedCounts.transactions++;
           }
         } catch (error) {
