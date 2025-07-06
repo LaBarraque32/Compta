@@ -107,6 +107,12 @@ const TransactionList: React.FC<TransactionListProps> = ({
         });
       }
 
+      // 🎯 DEBUG SPÉCIAL : Afficher TOUS les événements disponibles
+      console.log('🎭 TOUS LES ÉVÉNEMENTS DISPONIBLES:');
+      eventsData.forEach(event => {
+        console.log(`   - "${event.name}" → ID: ${event.id}`);
+      });
+
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -115,7 +121,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
   };
 
   // 🎯 NOUVELLE FONCTION : Rechargement avec délai pour IndexedDB
-  const loadDataWithDelay = async (delay: number = 100) => {
+  const loadDataWithDelay = async (delay: number = 300) => {
     console.log(`⏱️ Rechargement avec délai de ${delay}ms...`);
     await new Promise(resolve => setTimeout(resolve, delay));
     await loadData();
@@ -211,14 +217,24 @@ const TransactionList: React.FC<TransactionListProps> = ({
     return subcategory ? subcategory.name : subcategoryCode;
   };
 
-  // 🔧 FONCTION SIMPLIFIÉE pour récupérer le nom de l'événement
+  // 🎯 FONCTION CORRIGÉE pour récupérer le nom de l'événement avec debug
   const getEventName = (eventId: string | undefined): string => {
     if (!eventId || eventId.trim() === '') {
       return '';
     }
     
-    const event = events.find(e => e.id === eventId);
-    return event ? event.name : '';
+    console.log(`🔍 Recherche événement pour ID: "${eventId}"`);
+    console.log(`📋 Événements disponibles: ${events.length}`);
+    
+    const event = events.find(e => {
+      console.log(`   Comparaison: "${e.id}" === "${eventId}" ? ${e.id === eventId}`);
+      return e.id === eventId;
+    });
+    
+    const result = event ? event.name : '';
+    console.log(`🎯 Résultat: "${result}"`);
+    
+    return result;
   };
 
   const handleExportExcel = async () => {
@@ -342,17 +358,23 @@ const TransactionList: React.FC<TransactionListProps> = ({
         }
       }
 
-      // Importer les événements
+      // 🎯 CORRECTION CRITIQUE : Importer les événements AVANT les transactions
+      console.log('🎭 IMPORT DES ÉVÉNEMENTS...');
       for (const event of importData.events) {
         try {
           if (clearData || !isDuplicateEvent(event, existingEvents)) {
-            await addEvent(event);
+            const eventId = await addEvent(event);
+            console.log(`✅ Événement importé: "${event.name}" → ID: ${eventId}`);
             importedCounts.events++;
           }
         } catch (error) {
           console.warn('Event import error:', error);
         }
       }
+
+      // 🎯 ATTENDRE que les événements soient bien enregistrés
+      console.log('⏳ Attente synchronisation événements...');
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       // Importer les adhérents
       for (const member of importData.members) {
@@ -366,11 +388,13 @@ const TransactionList: React.FC<TransactionListProps> = ({
         }
       }
 
-      // Importer les transactions
+      // 🎯 CORRECTION CRITIQUE : Importer les transactions EN DERNIER
+      console.log('📝 IMPORT DES TRANSACTIONS...');
       for (const transaction of importData.transactions) {
         try {
           if (clearData || !isDuplicateTransaction(transaction, existingTransactions)) {
-            await addTransaction(transaction);
+            const transactionId = await addTransaction(transaction);
+            console.log(`✅ Transaction importée: "${transaction.description}" → eventId: ${transaction.eventId}`);
             importedCounts.transactions++;
           }
         } catch (error) {
@@ -388,9 +412,9 @@ const TransactionList: React.FC<TransactionListProps> = ({
         `${importedCounts.categories} catégories\n` +
         `${importedCounts.members} adhérents`);
 
-      // 🎯 CORRECTION CRITIQUE : Rechargement avec délai pour IndexedDB
+      // 🎯 CORRECTION CRITIQUE : Rechargement avec délai PLUS LONG pour IndexedDB
       console.log('🔄 RECHARGEMENT COMPLET après import...');
-      await loadDataWithDelay(200); // Délai de 200ms pour laisser IndexedDB se synchroniser
+      await loadDataWithDelay(500); // Délai de 500ms pour laisser IndexedDB se synchroniser
       setShowImportOptions(false);
     } catch (error) {
       console.error('Error importing Excel:', error);
