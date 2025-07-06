@@ -217,24 +217,15 @@ const TransactionList: React.FC<TransactionListProps> = ({
     return subcategory ? subcategory.name : subcategoryCode;
   };
 
-  // 🎯 FONCTION CORRIGÉE pour récupérer le nom de l'événement avec debug
+  // 🎯 FONCTION SIMPLIFIÉE pour récupérer le nom de l'événement (comme les catégories)
   const getEventName = (eventId: string | undefined): string => {
     if (!eventId || eventId.trim() === '') {
       return '';
     }
     
-    console.log(`🔍 Recherche événement pour ID: "${eventId}"`);
-    console.log(`📋 Événements disponibles: ${events.length}`);
-    
-    const event = events.find(e => {
-      console.log(`   Comparaison: "${e.id}" === "${eventId}" ? ${e.id === eventId}`);
-      return e.id === eventId;
-    });
-    
-    const result = event ? event.name : '';
-    console.log(`🎯 Résultat: "${result}"`);
-    
-    return result;
+    // 🎯 RECHERCHE SIMPLE comme pour les catégories
+    const event = events.find(e => e.id === eventId);
+    return event ? event.name : '';
   };
 
   const handleExportExcel = async () => {
@@ -358,7 +349,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
         }
       }
 
-      // 🎯 CORRECTION CRITIQUE : Importer les événements AVANT les transactions
+      // 🎯 IMPORTER LES ÉVÉNEMENTS EN PREMIER (avant les transactions)
       console.log('🎭 IMPORT DES ÉVÉNEMENTS...');
       for (const event of importData.events) {
         try {
@@ -372,10 +363,6 @@ const TransactionList: React.FC<TransactionListProps> = ({
         }
       }
 
-      // 🎯 ATTENDRE que les événements soient bien enregistrés
-      console.log('⏳ Attente synchronisation événements...');
-      await new Promise(resolve => setTimeout(resolve, 100));
-
       // Importer les adhérents
       for (const member of importData.members) {
         try {
@@ -388,7 +375,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
         }
       }
 
-      // 🎯 CORRECTION CRITIQUE : Importer les transactions EN DERNIER
+      // 🎯 IMPORTER LES TRANSACTIONS EN DERNIER
       console.log('📝 IMPORT DES TRANSACTIONS...');
       for (const transaction of importData.transactions) {
         try {
@@ -412,9 +399,9 @@ const TransactionList: React.FC<TransactionListProps> = ({
         `${importedCounts.categories} catégories\n` +
         `${importedCounts.members} adhérents`);
 
-      // 🎯 CORRECTION CRITIQUE : Rechargement avec délai PLUS LONG pour IndexedDB
+      // 🎯 RECHARGEMENT SIMPLE
       console.log('🔄 RECHARGEMENT COMPLET après import...');
-      await loadDataWithDelay(500); // Délai de 500ms pour laisser IndexedDB se synchroniser
+      await loadDataWithDelay(100);
       setShowImportOptions(false);
     } catch (error) {
       console.error('Error importing Excel:', error);
@@ -720,7 +707,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
                 </tr>
               ) : (
                 filteredTransactions.map((transaction) => {
-                  // 🔧 RÉCUPÉRATION DU NOM D'ÉVÉNEMENT pour chaque transaction
+                  // 🎯 RÉCUPÉRATION DU NOM D'ÉVÉNEMENT pour chaque transaction
                   const eventName = getEventName(transaction.eventId);
                   
                   return (
@@ -741,7 +728,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
                       <td className="px-4 py-3 text-sm text-gray-900">
                         <div className="max-w-xs">
                           <div className="truncate font-medium">{transaction.description}</div>
-                          {/* 🔧 AFFICHAGE DE L'ÉVÉNEMENT - Version simplifiée */}
+                          {/* 🎯 AFFICHAGE DE L'ÉVÉNEMENT - Version simplifiée */}
                           {eventName && (
                             <div className="flex items-center text-xs text-blue-600 mt-1">
                               <Users size={12} className="mr-1" />
